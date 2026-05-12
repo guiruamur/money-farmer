@@ -92,6 +92,20 @@ def test_indicator_snapshot():
     assert ind.volume_anomaly_ratio() == pytest.approx(125.0 / 80.0)
 
 
+def test_indicator_snapshot_zero_means_return_none():
+    ind = IndicatorSnapshot(
+        pair="BTC/USDT",
+        timestamp=datetime.now(timezone.utc),
+        rsi=50.0, macd=0.0, macd_signal=0.0, macd_hist=0.0,
+        ema_20=100.0, ema_50=100.0,
+        bb_upper=110.0, bb_lower=90.0,
+        atr=10.0, atr_mean_20=0.0,
+        volume=100.0, volume_mean_24h=0.0,
+    )
+    assert ind.atr_expansion_ratio() is None
+    assert ind.volume_anomaly_ratio() is None
+
+
 def test_ohlcv_summary_from_df():
     rows = [
         {"open": 100, "high": 105, "low": 99, "close": 104, "volume": 10},
@@ -103,6 +117,12 @@ def test_ohlcv_summary_from_df():
     assert s.recent[-1].close == 107
     assert s.highest_high == 108
     assert s.lowest_low == 99
+
+
+def test_ohlcv_summary_rejects_empty_df():
+    df = pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
+    with pytest.raises(ValueError):
+        OHLCVSummary.from_df(df, recent_n=2)
 
 
 def test_cycle_status_enum():

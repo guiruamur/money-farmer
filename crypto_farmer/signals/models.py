@@ -66,11 +66,13 @@ class IndicatorSnapshot(BaseModel):
     volume: float
     volume_mean_24h: float
 
-    def atr_expansion_ratio(self) -> float:
-        return self.atr / self.atr_mean_20 if self.atr_mean_20 else 0.0
+    def atr_expansion_ratio(self) -> float | None:
+        # None signals missing/insufficient mean (data quality issue),
+        # which is different from a real "no expansion" signal.
+        return self.atr / self.atr_mean_20 if self.atr_mean_20 else None
 
-    def volume_anomaly_ratio(self) -> float:
-        return self.volume / self.volume_mean_24h if self.volume_mean_24h else 0.0
+    def volume_anomaly_ratio(self) -> float | None:
+        return self.volume / self.volume_mean_24h if self.volume_mean_24h else None
 
 
 class OHLCVCandle(BaseModel):
@@ -88,6 +90,9 @@ class OHLCVSummary(BaseModel):
 
     @classmethod
     def from_df(cls, df: pd.DataFrame, *, recent_n: int) -> "OHLCVSummary":
+        """Build summary from a DataFrame with columns: open, high, low, close, volume."""
+        if df.empty:
+            raise ValueError("Cannot build OHLCVSummary from an empty DataFrame")
         tail = df.tail(recent_n)
         recent = [
             OHLCVCandle(
