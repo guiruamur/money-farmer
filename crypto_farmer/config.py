@@ -51,11 +51,11 @@ class NewsCfg(BaseModel):
 
 
 class PrefilterCfg(BaseModel):
-    rsi_oversold: float
-    rsi_overbought: float
-    volume_anomaly_factor: float
-    atr_expansion_factor: float
-    cooldown_minutes: int
+    rsi_oversold: float = Field(ge=0, le=100)
+    rsi_overbought: float = Field(ge=0, le=100)
+    volume_anomaly_factor: float = Field(gt=0)
+    atr_expansion_factor: float = Field(gt=0)
+    cooldown_minutes: int = Field(ge=0)
 
 
 class LLMCfg(BaseModel):
