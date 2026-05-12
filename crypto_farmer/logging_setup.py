@@ -13,7 +13,7 @@ _STANDARD_ATTRS = {
     "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
     "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
     "created", "msecs", "relativeCreated", "thread", "threadName",
-    "processName", "process", "message", "asctime",
+    "processName", "process", "message", "asctime", "taskName",
 }
 
 
@@ -67,6 +67,8 @@ def configure_logging(
         fh = TimedRotatingFileHandler(
             log_path, when=rotate_when, backupCount=retention_days, encoding="utf-8"
         )
+        # File handler always emits JSON regardless of json_format,
+        # so on-disk logs remain machine-parseable for post-mortem.
         fh.setFormatter(JsonFormatter())
         root.addHandler(fh)
 
