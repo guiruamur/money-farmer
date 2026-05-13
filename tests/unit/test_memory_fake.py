@@ -28,3 +28,21 @@ def test_fake_memory_update_outcome():
     hits = m.search(embedding=[1.0], k=1)
     assert hits[0].metadata["return_4h"] == 2.0
     assert hits[0].metadata["return_24h"] == 5.0
+
+
+def test_fake_memory_partial_update_outcome():
+    """Partial updates: set return_4h first, then return_24h; both must persist."""
+    m = InMemoryMemory()
+    eid = m.add(embedding=[1.0], text="x", metadata={"pair": "BTC/USDT"})
+
+    # Set only return_4h
+    m.update_outcome(entry_id=eid, return_4h=3.5)
+    hits = m.search(embedding=[1.0], k=1)
+    assert hits[0].metadata["return_4h"] == 3.5
+    assert "return_24h" not in hits[0].metadata
+
+    # Set only return_24h — return_4h must still be present
+    m.update_outcome(entry_id=eid, return_24h=7.2)
+    hits = m.search(embedding=[1.0], k=1)
+    assert hits[0].metadata["return_4h"] == 3.5
+    assert hits[0].metadata["return_24h"] == 7.2

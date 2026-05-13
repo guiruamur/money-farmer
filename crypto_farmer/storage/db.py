@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS signals (
   time_horizon TEXT,
   key_factors_json TEXT,
   delivered INTEGER NOT NULL DEFAULT 0,
-  price_at_signal REAL
+  price_at_signal REAL,
+  memory_entry_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_signals_pair ON signals(pair);
 CREATE INDEX IF NOT EXISTS idx_signals_generated ON signals(generated_at);
@@ -111,6 +112,11 @@ class Storage:
     def _init_schema(self) -> None:
         with self._conn() as c:
             c.executescript(SCHEMA)
+            # Graceful migration for existing DBs that predate the memory_entry_id column.
+            try:
+                c.execute("ALTER TABLE signals ADD COLUMN memory_entry_id TEXT")
+            except Exception:
+                pass  # Column already exists (OperationalError) or other benign error.
 
     def start_cycle(self) -> int:
         with self._conn() as c:
@@ -199,6 +205,13 @@ class Storage:
             cur = c.execute("SELECT * FROM signals WHERE id=?", (signal_id,))
             row = cur.fetchone()
             return dict(row) if row else None
+
+    def update_signal_memory_entry_id(self, *, signal_id: int, memory_entry_id: str) -> None:
+        with self._conn() as c:
+            c.execute(
+                "UPDATE signals SET memory_entry_id=? WHERE id=?",
+                (memory_entry_id, signal_id),
+            )
 
     def save_news_items(self, items: list[NewsItem]) -> int:
         if not items:

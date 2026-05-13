@@ -198,7 +198,8 @@ class Cycle:
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     },
                 )
-                log.debug("memory_added", extra={"entry_id": entry_id})
+                d.storage.update_signal_memory_entry_id(signal_id=sig_id, memory_entry_id=entry_id)
+                log.debug("memory_added", extra={"entry_id": entry_id, "signal_id": sig_id})
 
             d.outcomes.schedule_measurements(
                 signal_id=sig_id, generated_at=datetime.now(timezone.utc),

@@ -18,7 +18,7 @@ class Memory(Protocol):
         self, *, embedding: list[float], k: int, pair_filter: str | None = None,
     ) -> list[MemoryHit]: ...
     def update_outcome(
-        self, *, entry_id: str, return_4h: float, return_24h: float
+        self, *, entry_id: str, return_4h: float | None = None, return_24h: float | None = None
     ) -> None: ...
 
 
@@ -58,13 +58,15 @@ class ChromaMemory:
         return hits
 
     def update_outcome(
-        self, *, entry_id: str, return_4h: float, return_24h: float
+        self, *, entry_id: str, return_4h: float | None = None, return_24h: float | None = None
     ) -> None:
         existing = self._collection.get(ids=[entry_id])
         metas = existing.get("metadatas", [[]])
         if not metas or not metas[0]:
             return
         new_meta = dict(metas[0])
-        new_meta["return_4h"] = return_4h
-        new_meta["return_24h"] = return_24h
+        if return_4h is not None:
+            new_meta["return_4h"] = return_4h
+        if return_24h is not None:
+            new_meta["return_24h"] = return_24h
         self._collection.update(ids=[entry_id], metadatas=[new_meta])

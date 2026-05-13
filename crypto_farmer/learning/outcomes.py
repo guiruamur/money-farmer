@@ -80,4 +80,15 @@ class OutcomeService:
             return_pct=return_pct, verdict=verdict,
         )
         if self._memory is not None and job["horizon"] in ("4h", "24h"):
-            log.debug("memory_outcome_update", extra={"signal_id": sig_id, "horizon": job["horizon"]})
+            mem_entry_id = sig_row.get("memory_entry_id")
+            if mem_entry_id:
+                kwargs = (
+                    {"return_4h": return_pct}
+                    if job["horizon"] == "4h"
+                    else {"return_24h": return_pct}
+                )
+                self._memory.update_outcome(entry_id=mem_entry_id, **kwargs)
+                log.debug(
+                    "memory_outcome_updated",
+                    extra={"signal_id": sig_id, "horizon": job["horizon"], "entry_id": mem_entry_id},
+                )

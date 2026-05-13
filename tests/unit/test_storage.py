@@ -109,3 +109,43 @@ def test_pending_outcome_jobs(tmp_path: Path):
     storage.mark_outcome_job_done(job_id=due[0]["id"])
     due_after = storage.list_due_outcome_jobs(now=now)
     assert len(due_after) == 1
+
+
+def test_memory_entry_id_roundtrip(tmp_path: Path):
+    """memory_entry_id is NULL on creation and can be set via update_signal_memory_entry_id."""
+    storage = Storage(db_path=tmp_path / "t.db")
+    cycle_id = storage.start_cycle()
+    sig_id = storage.save_signal(
+        cycle_id=cycle_id, pair="BTC/USDT", timeframe="15m",
+        signal=_signal(), price_at_signal=100.0, delivered=True,
+    )
+    # Freshly saved signal has no memory_entry_id
+    row = storage.get_signal_by_id(signal_id=sig_id)
+    assert row is not None
+    assert row.get("memory_entry_id") is None
+
+    # Set it and confirm it persists
+    storage.update_signal_memory_entry_id(signal_id=sig_id, memory_entry_id="sit_42")
+    row = storage.get_signal_by_id(signal_id=sig_id)
+    assert row is not None
+    assert row["memory_entry_id"] == "sit_42"
+
+
+def test_update_signal_memory_entry_id_does_not_affect_other_signals(tmp_path: Path):
+    """Updating memory_entry_id for one signal must not affect siblings."""
+    storage = Storage(db_path=tmp_path / "t.db")
+    cycle_id = storage.start_cycle()
+    sig_a = storage.save_signal(
+        cycle_id=cycle_id, pair="BTC/USDT", timeframe="15m",
+        signal=_signal(), price_at_signal=100.0, delivered=True,
+    )
+    sig_b = storage.save_signal(
+        cycle_id=cycle_id, pair="ETH/USDT", timeframe="15m",
+        signal=_signal(), price_at_signal=2000.0, delivered=False,
+    )
+    storage.update_signal_memory_entry_id(signal_id=sig_a, memory_entry_id="sit_1")
+
+    row_a = storage.get_signal_by_id(signal_id=sig_a)
+    row_b = storage.get_signal_by_id(signal_id=sig_b)
+    assert row_a is not None and row_a["memory_entry_id"] == "sit_1"
+    assert row_b is not None and row_b.get("memory_entry_id") is None

@@ -41,9 +41,13 @@ class InMemoryMemory:
             for s, e in ranked[:k]
         ]
 
-    def update_outcome(self, *, entry_id: str, return_4h, return_24h) -> None:
+    def update_outcome(
+        self, *, entry_id: str, return_4h: float | None = None, return_24h: float | None = None
+    ) -> None:
         for e in self._entries:
             if e.metadata.get("id") == entry_id:
-                e.metadata["return_4h"] = return_4h
-                e.metadata["return_24h"] = return_24h
+                if return_4h is not None:
+                    e.metadata["return_4h"] = return_4h
+                if return_24h is not None:
+                    e.metadata["return_24h"] = return_24h
                 return

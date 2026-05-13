@@ -106,6 +106,13 @@ def test_cycle_persists_signals_and_contexts(tmp_path: Path):
     ctx = storage.get_analysis_context(signals[0]["id"])
     assert ctx is not None
     assert ctx["prompt_rendered"]
+    # Every generated signal must have a memory_entry_id persisted
+    for sig in signals:
+        row = storage.get_signal_by_id(signal_id=sig["id"])
+        assert row is not None
+        assert row.get("memory_entry_id") is not None, (
+            f"signal {sig['id']} missing memory_entry_id"
+        )
 
 
 def test_cycle_degraded_when_news_fails(tmp_path: Path):
