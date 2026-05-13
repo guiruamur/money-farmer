@@ -1,16 +1,16 @@
 scheduler:
-  interval_minutes: 15
+  interval_minutes: 1   # Modo demo: 1 ciclo/min. Subir a 15 para 24/7 real.
   timezone: "Europe/Madrid"
 
 market:
   exchange: binance
   pairs:
     - BTC/USDT
-    # Resto comentado durante smoke. Activar tras validar día 1-2.
-    # - ETH/USDT
-    # - BNB/USDT
-    # - SOL/USDT
-    # - XRP/USDT
+    - ETH/USDT
+    - SOL/USDT
+    - BNB/USDT
+    - XRP/USDT
+    # Reserva (descomentar para top 10):
     # - ADA/USDT
     # - DOGE/USDT
     # - AVAX/USDT
@@ -30,7 +30,7 @@ prefilter:
   rsi_overbought: 70
   volume_anomaly_factor: 1.8
   atr_expansion_factor: 1.5
-  cooldown_minutes: 60
+  cooldown_minutes: 3   # Modo demo. Subir a 60 en producción.
 
 llm:
   provider: ollama
@@ -51,6 +51,8 @@ delivery:
     min_confidence: 60
     bot_token: "${TELEGRAM_BOT_TOKEN}"
     chat_id: "${TELEGRAM_CHAT_ID}"
+    digest_minutes: 30          # 0 desactiva el resumen automático
+    digest_lookback_hours: 0.5  # ventana cubierta en cada digest
 
 news_credentials:
   cryptopanic_token: "${CRYPTOPANIC_API_TOKEN}"

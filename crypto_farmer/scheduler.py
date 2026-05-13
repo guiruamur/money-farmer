@@ -14,6 +14,8 @@ class CycleScheduler:
     def __init__(
         self, *, interval_minutes: int, timezone: str,
         cycle_callable: Callable[[], None], outcomes_callable: Callable[[], None],
+        digest_callable: Callable[[], None] | None = None,
+        digest_minutes: int = 0,
     ) -> None:
         self._scheduler = BackgroundScheduler(timezone=timezone)
         self._scheduler.add_job(
@@ -26,6 +28,12 @@ class CycleScheduler:
             minutes=max(1, interval_minutes // 3), id="outcomes",
             max_instances=1, coalesce=True,
         )
+        if digest_callable is not None and digest_minutes > 0:
+            self._scheduler.add_job(
+                digest_callable, trigger="interval",
+                minutes=digest_minutes, id="digest",
+                max_instances=1, coalesce=True,
+            )
         self._paused = False
 
     def start(self) -> None:

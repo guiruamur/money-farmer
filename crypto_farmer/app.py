@@ -15,6 +15,7 @@ from crypto_farmer.cycle import Cycle, CycleDeps
 from crypto_farmer.data.market import CcxtBinanceSource
 from crypto_farmer.data.news import CryptoPanicSource, NoopNewsSource
 from crypto_farmer.delivery.bot_commands import BotCommands, CommandContext
+from crypto_farmer.delivery.digest import DigestSender
 from crypto_farmer.delivery.telegram import TelegramNotifier
 from crypto_farmer.learning.embeddings import OllamaEmbeddings
 from crypto_farmer.learning.feedback import FeedbackBuilder
@@ -128,11 +129,21 @@ def build_app(*, config_path: str | Path) -> App:
     )
     cycle = Cycle(deps)
 
+    digest = DigestSender(
+        storage=storage,
+        bot=bot,
+        chat_id=cfg.delivery.telegram.chat_id,
+        lookback_hours=cfg.delivery.telegram.digest_lookback_hours,
+        memory_count_fn=lambda: memory._collection.count(),  # ChromaMemory internal
+    )
+
     scheduler = CycleScheduler(
         interval_minutes=cfg.scheduler.interval_minutes,
         timezone=cfg.scheduler.timezone,
         cycle_callable=cycle.run,
         outcomes_callable=lambda: outcomes.run_due_jobs(now=datetime.now(timezone.utc)),
+        digest_callable=digest.send,
+        digest_minutes=cfg.delivery.telegram.digest_minutes,
     )
 
     bot_ctx = CommandContext(

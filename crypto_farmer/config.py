@@ -78,6 +78,8 @@ class TelegramCfg(BaseModel):
     min_confidence: int = Field(ge=0, le=100)
     bot_token: str
     chat_id: str
+    digest_minutes: int = Field(default=0, ge=0)  # 0 = disabled
+    digest_lookback_hours: float = Field(default=0.5, gt=0)
 
 
 class DeliveryCfg(BaseModel):
