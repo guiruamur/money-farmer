@@ -16,6 +16,13 @@ class NewsSource(Protocol):
     def fetch_recent(self, since: datetime) -> list[NewsItem]: ...
 
 
+class NoopNewsSource:
+    """Returns an empty list. Used when news.enabled is False in config."""
+
+    def fetch_recent(self, since: datetime) -> list[NewsItem]:
+        return []
+
+
 class CryptoPanicSource:
     BASE = "https://cryptopanic.com/api/v1/posts/"
 

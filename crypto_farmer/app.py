@@ -13,7 +13,7 @@ from crypto_farmer.analysis.prefilter import Prefilter, PrefilterConfig
 from crypto_farmer.config import Config, load_config
 from crypto_farmer.cycle import Cycle, CycleDeps
 from crypto_farmer.data.market import CcxtBinanceSource
-from crypto_farmer.data.news import CryptoPanicSource
+from crypto_farmer.data.news import CryptoPanicSource, NoopNewsSource
 from crypto_farmer.delivery.bot_commands import BotCommands, CommandContext
 from crypto_farmer.delivery.telegram import TelegramNotifier
 from crypto_farmer.learning.embeddings import OllamaEmbeddings
@@ -77,7 +77,11 @@ def build_app(*, config_path: str | Path) -> App:
     storage = Storage(db_path=cfg.storage.sqlite_path)
 
     market = CcxtBinanceSource(exchange=ccxt.binance({"enableRateLimit": True}))
-    news = CryptoPanicSource(token=cfg.news_credentials.cryptopanic_token)
+    news = (
+        CryptoPanicSource(token=cfg.news_credentials.cryptopanic_token)
+        if cfg.news.enabled
+        else NoopNewsSource()
+    )
 
     indicators = IndicatorEngine()
     prefilter = Prefilter(PrefilterConfig(
