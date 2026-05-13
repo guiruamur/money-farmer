@@ -83,6 +83,37 @@ CREATE TABLE IF NOT EXISTS outcome_jobs (
   done INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_due ON outcome_jobs(due_at, done);
+
+CREATE TABLE IF NOT EXISTS paper_wallet (
+  id INTEGER PRIMARY KEY CHECK (id = 1),  -- singleton row
+  cash REAL NOT NULL,
+  vault REAL NOT NULL,
+  bankruptcies INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS paper_positions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pair TEXT NOT NULL UNIQUE,
+  qty REAL NOT NULL,
+  avg_entry_price REAL NOT NULL,
+  opened_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS paper_trades (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pair TEXT NOT NULL,
+  qty REAL NOT NULL,
+  entry_price REAL NOT NULL,
+  exit_price REAL NOT NULL,
+  gross_profit REAL NOT NULL,
+  fees REAL NOT NULL,
+  net_profit REAL NOT NULL,
+  to_vault REAL NOT NULL,
+  opened_at TEXT NOT NULL,
+  closed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_trades_closed ON paper_trades(closed_at);
 """
 
 
@@ -284,3 +315,78 @@ class Storage:
     def mark_outcome_job_done(self, *, job_id: int) -> None:
         with self._conn() as c:
             c.execute("UPDATE outcome_jobs SET done=1 WHERE id=?", (job_id,))
+
+    # ---------- Paper trading ----------
+
+    def get_wallet(self) -> dict[str, Any] | None:
+        with self._conn() as c:
+            cur = c.execute("SELECT * FROM paper_wallet WHERE id=1")
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def save_wallet(self, *, cash: float, vault: float, bankruptcies: int) -> None:
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO paper_wallet (id, cash, vault, bankruptcies, updated_at) "
+                "VALUES (1, ?, ?, ?, ?) "
+                "ON CONFLICT(id) DO UPDATE SET cash=excluded.cash, vault=excluded.vault, "
+                "bankruptcies=excluded.bankruptcies, updated_at=excluded.updated_at",
+                (cash, vault, bankruptcies, _iso(datetime.now(timezone.utc))),
+            )
+
+    def upsert_position(
+        self, *, pair: str, qty: float, avg_entry_price: float, opened_at: datetime
+    ) -> int:
+        with self._conn() as c:
+            cur = c.execute(
+                "INSERT INTO paper_positions (pair, qty, avg_entry_price, opened_at) "
+                "VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(pair) DO UPDATE SET qty=excluded.qty, "
+                "avg_entry_price=excluded.avg_entry_price, opened_at=excluded.opened_at "
+                "RETURNING id",
+                (pair, qty, avg_entry_price, _iso(opened_at)),
+            )
+            row = cur.fetchone()
+            return int(row["id"]) if row else 0
+
+    def get_position(self, *, pair: str) -> dict[str, Any] | None:
+        with self._conn() as c:
+            cur = c.execute("SELECT * FROM paper_positions WHERE pair=?", (pair,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def delete_position(self, *, pair: str) -> None:
+        with self._conn() as c:
+            c.execute("DELETE FROM paper_positions WHERE pair=?", (pair,))
+
+    def list_positions(self) -> list[dict[str, Any]]:
+        with self._conn() as c:
+            cur = c.execute("SELECT * FROM paper_positions ORDER BY pair")
+            return [dict(r) for r in cur.fetchall()]
+
+    def delete_all_positions(self) -> int:
+        with self._conn() as c:
+            cur = c.execute("DELETE FROM paper_positions")
+            return cur.rowcount
+
+    def save_trade(
+        self, *, pair: str, qty: float, entry_price: float, exit_price: float,
+        gross_profit: float, fees: float, net_profit: float, to_vault: float,
+        opened_at: datetime, closed_at: datetime,
+    ) -> int:
+        with self._conn() as c:
+            cur = c.execute(
+                "INSERT INTO paper_trades (pair, qty, entry_price, exit_price, "
+                "gross_profit, fees, net_profit, to_vault, opened_at, closed_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (pair, qty, entry_price, exit_price, gross_profit, fees, net_profit,
+                 to_vault, _iso(opened_at), _iso(closed_at)),
+            )
+            return int(cur.lastrowid)
+
+    def list_trades(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        with self._conn() as c:
+            cur = c.execute(
+                "SELECT * FROM paper_trades ORDER BY id DESC LIMIT ?", (limit,)
+            )
+            return [dict(r) for r in cur.fetchall()]

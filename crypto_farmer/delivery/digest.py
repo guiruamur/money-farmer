@@ -98,6 +98,26 @@ def build_digest_text(
         lines.append(f"Mejor: {escape(best[0])} {escape(best[1])} {best[2]:+.2f}%")
     if worst is not None and worst != best:
         lines.append(f"Peor: {escape(worst[0])} {escape(worst[1])} {worst[2]:+.2f}%")
+
+    # Paper trading wallet snapshot (if enabled — wallet row exists)
+    wallet = storage.get_wallet()
+    if wallet is not None:
+        positions = storage.list_positions()
+        open_count = len(positions)
+        trades = storage.list_trades(limit=500)
+        total_pnl = sum(float(t["net_profit"]) for t in trades)
+        lines.append("")
+        lines.append("💼 <b>Cartera paper</b>")
+        lines.append(
+            f"Cash: {float(wallet['cash']):.2f}€  ·  "
+            f"Vault: {float(wallet['vault']):.2f}€  ·  "
+            f"Posiciones abiertas: {open_count}"
+        )
+        lines.append(
+            f"P&amp;L acumulado: {total_pnl:+.2f}€  ·  "
+            f"Trades cerrados: {len(trades)}  ·  "
+            f"Bancarrotas: {wallet['bankruptcies']}"
+        )
     return "\n".join(lines)
 
 

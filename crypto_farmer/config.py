@@ -103,6 +103,14 @@ class StorageCfg(BaseModel):
     chroma_path: str
 
 
+class PaperCfg(BaseModel):
+    enabled: bool = False
+    initial_cash: float = Field(default=1000.0, gt=0)
+    position_size_pct: float = Field(default=0.20, gt=0, le=1)
+    vault_pct: float = Field(default=0.20, ge=0, le=1)
+    fee_rate: float = Field(default=0.001, ge=0, lt=0.5)
+
+
 class Config(BaseModel):
     scheduler: SchedulerCfg
     market: MarketCfg
@@ -114,6 +122,7 @@ class Config(BaseModel):
     news_credentials: NewsCredentialsCfg
     logging: LoggingCfg
     storage: StorageCfg
+    paper: PaperCfg = Field(default_factory=PaperCfg)
 
 
 def load_config(path: str | Path) -> Config:

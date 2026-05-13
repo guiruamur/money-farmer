@@ -26,6 +26,7 @@ from crypto_farmer.llm.parser import SignalParser
 from crypto_farmer.llm.prompts import PromptBuilder
 from crypto_farmer.logging_setup import configure_logging, get_logger
 from crypto_farmer.metrics import Metrics
+from crypto_farmer.paper.trader import PaperTrader, PaperTraderConfig
 from crypto_farmer.scheduler import CycleScheduler
 from crypto_farmer.storage.db import Storage
 
@@ -113,6 +114,18 @@ def build_app(*, config_path: str | Path) -> App:
     bot = Bot(token=cfg.delivery.telegram.bot_token)
     notifier = TelegramNotifier(bot=bot, chat_id=cfg.delivery.telegram.chat_id)
 
+    paper_trader: PaperTrader | None = None
+    if cfg.paper.enabled:
+        paper_trader = PaperTrader(
+            storage=storage,
+            config=PaperTraderConfig(
+                initial_cash=cfg.paper.initial_cash,
+                position_size_pct=cfg.paper.position_size_pct,
+                vault_pct=cfg.paper.vault_pct,
+                fee_rate=cfg.paper.fee_rate,
+            ),
+        )
+
     deps = CycleDeps(
         market=market, news=news,
         indicators=indicators, prefilter=prefilter,
@@ -126,6 +139,7 @@ def build_app(*, config_path: str | Path) -> App:
         news_max_age_hours=cfg.news.max_age_hours,
         memory_k=cfg.learning.memory_k,
         feedback_lookback=cfg.learning.feedback_lookback,
+        paper_trader=paper_trader,
     )
     cycle = Cycle(deps)
 

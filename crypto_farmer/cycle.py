@@ -20,6 +20,7 @@ from crypto_farmer.llm.parser import LLMParseError, SignalParser
 from crypto_farmer.llm.prompts import PromptBuilder
 from crypto_farmer.logging_setup import get_logger
 from crypto_farmer.metrics import Metrics
+from crypto_farmer.paper.trader import PaperTrader
 from crypto_farmer.signals.models import (
     CycleStatus, OHLCVSummary, SignalAction,
 )
@@ -51,6 +52,7 @@ class CycleDeps:
     news_max_age_hours: int
     memory_k: int
     feedback_lookback: int
+    paper_trader: PaperTrader | None = None
 
 
 @dataclass
@@ -208,6 +210,17 @@ class Cycle:
                 d.notifier.deliver([DeliverableSignal(
                     pair=pair, signal=parsed.signal, price_at_signal=float(price),
                 )])
+
+            # Paper trading: ejecutamos sobre cualquier señal con confianza
+            # suficiente (incluso si action == HOLD, el trader la ignora).
+            # Nota: usamos confidence >= min_confidence como filtro paralelo al
+            # de Telegram, así no operamos sobre señales con baja convicción.
+            if d.paper_trader is not None and parsed.signal.confidence >= d.min_confidence:
+                outcome = d.paper_trader.on_signal(
+                    pair=pair, action=parsed.signal.action, price=float(price),
+                )
+                # Solo notificamos las acciones interesantes (open/close/no-pos/bancarrota)
+                d.notifier.deliver_paper_outcome(outcome)
 
         status = CycleStatus.OK if not notes else CycleStatus.DEGRADED
         note_str = "; ".join(notes) if notes else None

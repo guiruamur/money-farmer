@@ -67,3 +67,10 @@ logging:
 storage:
   sqlite_path: "data/crypto_farmer.db"
   chroma_path: "data/memory"
+
+paper:
+  enabled: true
+  initial_cash: 1000.0
+  position_size_pct: 0.20   # 20% del cash por BUY
+  vault_pct: 0.20           # 20% del profit de cada trade ganador va a caja fuerte
+  fee_rate: 0.001           # 0.1% por trade (típico Binance taker)
