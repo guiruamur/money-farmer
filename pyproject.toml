@@ -37,6 +37,9 @@ include = ["crypto_farmer*"]
 testpaths = ["tests"]
 addopts = "-ra"
 asyncio_mode = "auto"
+markers = [
+    "llm: tests that require a running Ollama (set RUN_LLM_TESTS=1 to enable)",
+]
 
 [tool.ruff]
 line-length = 100
