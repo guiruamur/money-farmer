@@ -1,0 +1,48 @@
+## Par: {{ pair }} | Timeframe: {{ timeframe }} | Hora: {{ now }}
+
+## Datos técnicos
+- RSI: {{ "%.2f"|format(indicators.rsi) }}
+- MACD: {{ "%.4f"|format(indicators.macd) }} / signal {{ "%.4f"|format(indicators.macd_signal) }} / hist {{ "%.4f"|format(indicators.macd_hist) }}
+- EMA20: {{ "%.2f"|format(indicators.ema_20) }}, EMA50: {{ "%.2f"|format(indicators.ema_50) }}
+- Bollinger: [{{ "%.2f"|format(indicators.bb_lower) }}, {{ "%.2f"|format(indicators.bb_upper) }}]
+- ATR: {{ "%.2f"|format(indicators.atr) }} (media20 {{ "%.2f"|format(indicators.atr_mean_20) }})
+- Volumen: {{ "%.2f"|format(indicators.volume) }} (media24h {{ "%.2f"|format(indicators.volume_mean_24h) }})
+
+## Acción reciente del precio (últimas {{ ohlcv_summary.recent|length }} velas)
+{% for c in ohlcv_summary.recent -%}
+- O {{ "%.2f"|format(c.open) }} H {{ "%.2f"|format(c.high) }} L {{ "%.2f"|format(c.low) }} C {{ "%.2f"|format(c.close) }} V {{ "%.2f"|format(c.volume) }}
+{% endfor %}
+
+## Noticias relevantes (últimas 4h)
+{% if news -%}
+{% for n in news -%}
+- [{{ n.published_at }}] {{ n.title }}
+{% endfor %}
+{%- else -%}
+- (sin noticias relevantes)
+{%- endif %}
+
+## Tu rendimiento reciente (últimas {{ recent_feedback.lookback }} señales)
+- Win rate: {{ recent_feedback.win_rate }}%
+- Resumen: {{ recent_feedback.summary }}
+
+## Situaciones pasadas similares
+{% if memory_hits -%}
+{% for hit in memory_hits -%}
+- [Hace {{ hit.age }}] {{ hit.summary }}. Decidiste {{ hit.action }}. Resultado 4h: {{ hit.outcome_4h }}, 24h: {{ hit.outcome_24h }}.
+{% endfor %}
+{%- else -%}
+- (sin situaciones similares en memoria)
+{%- endif %}
+
+## Tu tarea
+Analiza el par y responde EXCLUSIVAMENTE con un objeto JSON con este schema, sin texto adicional ni explicación previa:
+{
+  "action": "BUY" | "SELL" | "HOLD",
+  "confidence": entero 0-100,
+  "reasoning": string corto (max 500 chars),
+  "entry_price_hint": float | null,
+  "invalidation_level": float | null,
+  "time_horizon": "short" | "medium" | "long",
+  "key_factors": [hasta 5 strings]
+}
