@@ -13,8 +13,8 @@ venv/
 
 # Project
 .env
-data/
-!data/.gitkeep
+/data/
+!/data/.gitkeep
 
 # IDE
 .vscode/

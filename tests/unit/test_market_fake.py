@@ -28,3 +28,10 @@ def test_fake_raises_on_unknown_pair():
     import pytest
     with pytest.raises(KeyError):
         fake.fetch_ohlcv("UNKNOWN/USDT", "15m", lookback=200)
+
+
+def test_fake_ticker_raises_on_unknown_pair():
+    fake = FakeMarketDataSource(tickers={})
+    import pytest
+    with pytest.raises(KeyError):
+        fake.fetch_ticker("UNKNOWN/USDT")
