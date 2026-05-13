@@ -1803,9 +1803,13 @@ class Prefilter:
         triggers: list[str] = []
         if snap.rsi <= self._cfg.rsi_oversold or snap.rsi >= self._cfg.rsi_overbought:
             triggers.append("rsi_extreme")
-        if snap.volume_anomaly_ratio() >= self._cfg.volume_anomaly_factor:
+        # ratios return None when their denominator is zero (data quality issue).
+        # Treat None as "no trigger" — never crash on missing data.
+        vol_ratio = snap.volume_anomaly_ratio()
+        if vol_ratio is not None and vol_ratio >= self._cfg.volume_anomaly_factor:
             triggers.append("volume_anomaly")
-        if snap.atr_expansion_ratio() >= self._cfg.atr_expansion_factor:
+        atr_ratio = snap.atr_expansion_ratio()
+        if atr_ratio is not None and atr_ratio >= self._cfg.atr_expansion_factor:
             triggers.append("atr_expansion")
         if self._ema_cross_recent(history):
             triggers.append("ema_cross")
