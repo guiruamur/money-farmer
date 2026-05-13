@@ -38,6 +38,7 @@ def test_fetch_ticker_returns_model():
     t = src.fetch_ticker("BTC/USDT")
     assert t.price == 42000.5
     assert t.pair == "BTC/USDT"
+    assert t.timestamp.tzinfo is not None  # always UTC-aware
 
 
 def test_fetch_raises_market_fetch_error_on_ccxt_failure():
