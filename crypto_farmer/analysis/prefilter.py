@@ -51,13 +51,16 @@ class Prefilter:
             last_action, last_time = last_signal_for_pair
             elapsed = datetime.now(timezone.utc) - last_time
             if elapsed < timedelta(minutes=self._cfg.cooldown_minutes):
-                proposed = _direction_from_rsi(snap.rsi, self._cfg)
-                opposite = {
-                    SignalAction.BUY: SignalAction.SELL,
-                    SignalAction.SELL: SignalAction.BUY,
-                }
-                if proposed != opposite.get(last_action):
-                    return PrefilterDecision(passes=False, reason="cooldown", triggers=triggers)
+                # Cooldown only applies after a directional (BUY/SELL) signal.
+                # A previous HOLD imposes no cooldown.
+                if last_action != SignalAction.HOLD:
+                    proposed = _direction_from_rsi(snap.rsi, self._cfg)
+                    opposite = {
+                        SignalAction.BUY: SignalAction.SELL,
+                        SignalAction.SELL: SignalAction.BUY,
+                    }
+                    if proposed != opposite[last_action]:
+                        return PrefilterDecision(passes=False, reason="cooldown", triggers=triggers)
 
         return PrefilterDecision(passes=True, triggers=triggers)
 
@@ -89,12 +92,12 @@ class Prefilter:
         return len(set(signs)) > 1  # hubo cambio de signo en las últimas 3 velas
 
     def _range_breakout(self, snap: IndicatorSnapshot, history: pd.DataFrame) -> bool:
-        if history.empty or "high" not in history.columns or "low" not in history.columns:
+        if history.empty or not {"high", "low", "close"}.issubset(history.columns):
             return False
         last_20 = history.tail(20)
         if len(last_20) < 5:
             return False
         max_high = last_20["high"].iloc[:-1].max() if len(last_20) > 1 else last_20["high"].max()
         min_low = last_20["low"].iloc[:-1].min() if len(last_20) > 1 else last_20["low"].min()
-        close = float(last_20["close"].iloc[-1]) if "close" in last_20.columns else 0.0
+        close = float(last_20["close"].iloc[-1])
         return close > max_high or close < min_low

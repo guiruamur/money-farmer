@@ -120,3 +120,14 @@ def test_cooldown_expired_passes():
         last_signal_for_pair=(SignalAction.BUY, last_time),
     )
     assert decision.passes
+
+
+def test_cooldown_does_not_apply_after_hold():
+    pf = Prefilter(_cfg())
+    last_time = datetime.now(timezone.utc) - timedelta(minutes=10)
+    decision = pf.evaluate(
+        _snap(rsi=28),
+        recent_history=pd.DataFrame(),
+        last_signal_for_pair=(SignalAction.HOLD, last_time),
+    )
+    assert decision.passes
