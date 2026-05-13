@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from html import escape
 
 from crypto_farmer.delivery.notifier import DeliverableSignal
 from crypto_farmer.signals.models import CycleStatus
@@ -10,10 +11,18 @@ _ACTION_EMOJI = {"BUY": "🟢", "SELL": "🔴", "HOLD": "⚪"}
 
 
 def format_signal_message(ds: DeliverableSignal) -> str:
+    """Render a DeliverableSignal as Telegram HTML.
+
+    HTML mode is used (not Markdown) because Markdown trips on unmatched `*`
+    or `_` in reasoning text; HTML only needs `< > &` escaped.
+    """
     s = ds.signal
     emoji = _ACTION_EMOJI.get(s.action.value, "")
+    pair = escape(ds.pair)
+    reasoning = escape(s.reasoning)
+    factors = ", ".join(escape(f) for f in s.key_factors)
     lines = [
-        f"{emoji} *{s.action.value}* {ds.pair} (conf {s.confidence})",
+        f"{emoji} <b>{s.action.value}</b> {pair} (conf {s.confidence})",
         f"Precio: {ds.price_at_signal:.4f}",
     ]
     if s.entry_price_hint is not None:
@@ -21,9 +30,9 @@ def format_signal_message(ds: DeliverableSignal) -> str:
     if s.invalidation_level is not None:
         lines.append(f"Invalidación: {s.invalidation_level:.4f}")
     lines.append(f"Horizonte: {s.time_horizon.value}")
-    lines.append(f"Razón: {s.reasoning}")
+    lines.append(f"Razón: {reasoning}")
     if s.key_factors:
-        lines.append("Factores: " + ", ".join(s.key_factors))
+        lines.append("Factores: " + factors)
     return "\n".join(lines)
 
 
@@ -37,7 +46,7 @@ class TelegramNotifier:
             text = format_signal_message(ds)
             asyncio.run(
                 self._bot.send_message(
-                    chat_id=self._chat_id, text=text, parse_mode="Markdown",
+                    chat_id=self._chat_id, text=text, parse_mode="HTML",
                 )
             )
 
@@ -45,9 +54,9 @@ class TelegramNotifier:
         if status == CycleStatus.OK:
             return
         prefix = "⚠️" if status == CycleStatus.DEGRADED else "⛔"
-        text = f"{prefix} Ciclo {status.value}"
+        text = f"{prefix} Ciclo {escape(status.value)}"
         if note:
-            text += f": {note}"
+            text += f": {escape(note)}"
         asyncio.run(
             self._bot.send_message(chat_id=self._chat_id, text=text)
         )
