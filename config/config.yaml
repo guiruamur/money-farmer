@@ -6,15 +6,16 @@ market:
   exchange: binance
   pairs:
     - BTC/USDT
-    - ETH/USDT
-    - BNB/USDT
-    - SOL/USDT
-    - XRP/USDT
-    - ADA/USDT
-    - DOGE/USDT
-    - AVAX/USDT
-    - LINK/USDT
-    - DOT/USDT
+    # Resto comentado durante smoke. Activar tras validar día 1-2.
+    # - ETH/USDT
+    # - BNB/USDT
+    # - SOL/USDT
+    # - XRP/USDT
+    # - ADA/USDT
+    # - DOGE/USDT
+    # - AVAX/USDT
+    # - LINK/USDT
+    # - DOT/USDT
   timeframe: "15m"
   ohlcv_lookback: 200
 

@@ -6,11 +6,15 @@ import signal
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-from crypto_farmer.app import build_app
-from crypto_farmer.logging_setup import get_logger
+# Load .env at the earliest possible moment so config.py sees TELEGRAM_*, etc.
+load_dotenv()
+
+from crypto_farmer.app import build_app  # noqa: E402
+from crypto_farmer.logging_setup import get_logger  # noqa: E402
 
 
 log = get_logger(__name__)

@@ -31,9 +31,13 @@ class CcxtBinanceSource:
             rows = self._exchange.fetch_ohlcv(pair, timeframe, limit=lookback)
         except Exception as e:
             raise MarketFetchError(f"fetch_ohlcv {pair} {timeframe}: {e}") from e
-        return pd.DataFrame(
+        df = pd.DataFrame(
             rows, columns=["timestamp", "open", "high", "low", "close", "volume"]
         )
+        # CCXT returns timestamps as ms epoch ints. Convert to UTC-aware pandas Timestamps
+        # so downstream code (indicators, situation) can treat them as datetimes.
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+        return df
 
     def fetch_ticker(self, pair: str) -> Ticker:
         try:
