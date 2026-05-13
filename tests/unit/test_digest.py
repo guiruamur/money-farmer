@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+
+import httpx
+import respx
 
 from crypto_farmer.delivery.digest import DigestSender, build_digest_text
 from crypto_farmer.signals.models import (
@@ -67,28 +69,31 @@ def test_digest_lookback_excludes_old(tmp_path: Path):
     assert "Ciclos: 0" in text
 
 
-def test_digest_sender_calls_bot(tmp_path: Path):
+_DIGEST_URL = "https://api.telegram.org/botTOK/sendMessage"
+
+
+@respx.mock
+def test_digest_sender_posts_to_bot_api(tmp_path: Path):
     storage = Storage(db_path=tmp_path / "t.db")
-    bot = MagicMock()
-    bot.send_message = AsyncMock()
+    route = respx.post(_DIGEST_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
     sender = DigestSender(
-        storage=storage, bot=bot, chat_id="42",
+        storage=storage, bot="TOK", chat_id="42",
         lookback_hours=1, memory_count_fn=lambda: 7,
     )
     sender.send()
-    bot.send_message.assert_awaited()
-    _, kwargs = bot.send_message.await_args
-    assert kwargs["chat_id"] == "42"
-    assert kwargs["parse_mode"] == "HTML"
-    assert "Memoria RAG: 7 situaciones" in kwargs["text"]
+    assert route.called
+    payload = dict(httpx.QueryParams(route.calls.last.request.content.decode()))
+    assert payload["chat_id"] == "42"
+    assert payload["parse_mode"] == "HTML"
+    assert "Memoria RAG: 7 situaciones" in payload["text"]
 
 
+@respx.mock
 def test_digest_sender_swallows_bot_errors(tmp_path: Path):
     storage = Storage(db_path=tmp_path / "t.db")
-    bot = MagicMock()
-    bot.send_message = AsyncMock(side_effect=RuntimeError("boom"))
+    respx.post(_DIGEST_URL).mock(return_value=httpx.Response(500))
     sender = DigestSender(
-        storage=storage, bot=bot, chat_id="42",
+        storage=storage, bot="TOK", chat_id="42",
         lookback_hours=1, memory_count_fn=None,
     )
     # Should not raise — failed digest is best-effort

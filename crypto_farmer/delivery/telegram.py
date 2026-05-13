@@ -1,7 +1,22 @@
+"""Synchronous Telegram notifier.
+
+Sends messages by hitting the Bot HTTP API directly with httpx (no asyncio).
+We used to call python-telegram-bot's async Bot.send_message wrapped in
+asyncio.run, but that broke when two `asyncio.run` calls happened back-to-back
+in the same scheduler thread (the Bot's internal async client was bound to the
+first event loop, which was already closed by the time the second call ran).
+
+The polling side (Application.updater.start_polling) keeps using
+python-telegram-bot in __main__.py; this notifier is only for outbound calls
+from synchronous scheduler threads.
+"""
+
 from __future__ import annotations
 
-import asyncio
 from html import escape
+from typing import Any
+
+import httpx
 
 from crypto_farmer.delivery.notifier import DeliverableSignal
 from crypto_farmer.paper.models import ActionKind, ActionOutcome
@@ -11,12 +26,16 @@ from crypto_farmer.signals.models import CycleStatus
 _ACTION_EMOJI = {"BUY": "🟢", "SELL": "🔴", "HOLD": "⚪"}
 
 
-def format_signal_message(ds: DeliverableSignal) -> str:
-    """Render a DeliverableSignal as Telegram HTML.
+def _extract_token(bot_or_token: Any) -> str:
+    # Backwards-compat: accept either a string token or a python-telegram-bot Bot.
+    if isinstance(bot_or_token, str):
+        return bot_or_token
+    if hasattr(bot_or_token, "token"):
+        return bot_or_token.token
+    raise TypeError("bot must be a python-telegram-bot Bot or a token string")
 
-    HTML mode is used (not Markdown) because Markdown trips on unmatched `*`
-    or `_` in reasoning text; HTML only needs `< > &` escaped.
-    """
+
+def format_signal_message(ds: DeliverableSignal) -> str:
     s = ds.signal
     emoji = _ACTION_EMOJI.get(s.action.value, "")
     pair = escape(ds.pair)
@@ -37,49 +56,7 @@ def format_signal_message(ds: DeliverableSignal) -> str:
     return "\n".join(lines)
 
 
-class TelegramNotifier:
-    def __init__(self, *, bot, chat_id: str) -> None:
-        self._bot = bot
-        self._chat_id = chat_id
-
-    def deliver(self, signals: list[DeliverableSignal]) -> None:
-        for ds in signals:
-            text = format_signal_message(ds)
-            asyncio.run(
-                self._bot.send_message(
-                    chat_id=self._chat_id, text=text, parse_mode="HTML",
-                )
-            )
-
-    def deliver_cycle_status(self, *, status: CycleStatus, note: str | None) -> None:
-        if status == CycleStatus.OK:
-            return
-        prefix = "⚠️" if status == CycleStatus.DEGRADED else "⛔"
-        text = f"{prefix} Ciclo {escape(status.value)}"
-        if note:
-            text += f": {escape(note)}"
-        asyncio.run(
-            self._bot.send_message(chat_id=self._chat_id, text=text)
-        )
-
-    def deliver_paper_outcome(self, outcome: ActionOutcome) -> None:
-        """Notify about a paper-trading action. Silent for HOLD/has-pos cases."""
-        text = format_paper_outcome(outcome)
-        if text is None:
-            return
-        try:
-            asyncio.run(
-                self._bot.send_message(
-                    chat_id=self._chat_id, text=text, parse_mode="HTML",
-                )
-            )
-        except Exception:
-            # Best-effort: don't crash the cycle on a Telegram glitch.
-            pass
-
-
 def format_paper_outcome(outcome: ActionOutcome) -> str | None:
-    """Render a paper-trading outcome as Telegram HTML. Returns None to skip."""
     pair = escape(outcome.pair)
     if outcome.kind == ActionKind.OPENED and outcome.position is not None:
         p = outcome.position
@@ -105,7 +82,49 @@ def format_paper_outcome(outcome: ActionOutcome) -> str | None:
         return "\n".join(lines)
     if outcome.kind == ActionKind.IGNORED_NO_POS:
         return (
-            f"ℹ️ Señal <b>SELL</b> de {pair} ignorada (no hay posición abierta de este par)."
+            f"ℹ️ Señal <b>SELL</b> de {pair} ignorada (no hay posición abierta)."
         )
-    # IGNORED_HAS_POS, IGNORED_NO_CASH, IGNORED_HOLD: silenciosos
     return None
+
+
+class TelegramNotifier:
+    """Synchronous Telegram client. Accepts a Bot instance or a raw token."""
+
+    def __init__(self, *, bot: Any, chat_id: str, timeout: float = 10.0) -> None:
+        self._token = _extract_token(bot)
+        self._chat_id = chat_id
+        self._client = httpx.Client(timeout=timeout)
+        # Keep a reference to the Bot for tests that introspect it (legacy API).
+        self._bot = bot
+
+    def _send(self, text: str, *, parse_mode: str | None = "HTML") -> None:
+        url = f"https://api.telegram.org/bot{self._token}/sendMessage"
+        payload: dict[str, Any] = {"chat_id": self._chat_id, "text": text}
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
+        try:
+            r = self._client.post(url, data=payload)
+            r.raise_for_status()
+        except Exception:
+            # Outbound notifications are best-effort: a Telegram glitch must
+            # never crash a trading cycle.
+            pass
+
+    def deliver(self, signals: list[DeliverableSignal]) -> None:
+        for ds in signals:
+            self._send(format_signal_message(ds))
+
+    def deliver_cycle_status(self, *, status: CycleStatus, note: str | None) -> None:
+        if status == CycleStatus.OK:
+            return
+        prefix = "⚠️" if status == CycleStatus.DEGRADED else "⛔"
+        text = f"{prefix} Ciclo {escape(status.value)}"
+        if note:
+            text += f": {escape(note)}"
+        self._send(text)
+
+    def deliver_paper_outcome(self, outcome: ActionOutcome) -> None:
+        text = format_paper_outcome(outcome)
+        if text is None:
+            return
+        self._send(text)

@@ -6,10 +6,11 @@ scheduler skips wiring it if `digest_minutes` is 0 or `digest_callable` is None.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 from html import escape
-from typing import Callable
+from typing import Any, Callable
+
+import httpx
 
 from crypto_farmer.logging_setup import get_logger
 from crypto_farmer.storage.db import Storage
@@ -121,23 +122,34 @@ def build_digest_text(
     return "\n".join(lines)
 
 
+def _extract_token(bot_or_token: Any) -> str:
+    if isinstance(bot_or_token, str):
+        return bot_or_token
+    if hasattr(bot_or_token, "token"):
+        return bot_or_token.token
+    raise TypeError("bot must be a python-telegram-bot Bot or a token string")
+
+
 class DigestSender:
-    """Builds and sends a digest message via the Telegram bot."""
+    """Builds and sends a digest message via the Telegram HTTP API (sync)."""
 
     def __init__(
         self,
         *,
         storage: Storage,
-        bot,
+        bot: Any,
         chat_id: str,
         lookback_hours: float,
         memory_count_fn: Callable[[], int] | None = None,
+        timeout: float = 10.0,
     ) -> None:
         self._storage = storage
-        self._bot = bot
+        self._token = _extract_token(bot)
+        self._bot = bot  # kept for legacy test introspection
         self._chat_id = chat_id
         self._lookback_hours = lookback_hours
         self._memory_count_fn = memory_count_fn
+        self._client = httpx.Client(timeout=timeout)
 
     def send(self) -> None:
         memory_count: int | None = None
@@ -152,12 +164,13 @@ class DigestSender:
             lookback_hours=self._lookback_hours,
             memory_count=memory_count,
         )
+        url = f"https://api.telegram.org/bot{self._token}/sendMessage"
         try:
-            asyncio.run(
-                self._bot.send_message(
-                    chat_id=self._chat_id, text=text, parse_mode="HTML",
-                )
+            r = self._client.post(
+                url,
+                data={"chat_id": self._chat_id, "text": text, "parse_mode": "HTML"},
             )
+            r.raise_for_status()
             log.info("digest_sent", extra={"lookback_hours": self._lookback_hours})
         except Exception as e:
             log.warning("digest_send_failed", extra={"error": str(e)})
