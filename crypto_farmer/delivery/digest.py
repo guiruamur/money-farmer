@@ -45,6 +45,13 @@ def build_digest_text(
     ok = sum(1 for c in recent_cycles if c.get("status") == "ok")
     degraded = sum(1 for c in recent_cycles if c.get("status") == "degraded")
     failed = sum(1 for c in recent_cycles if c.get("status") == "failed")
+    # A cycle with no terminal status crashed mid-run (uncaught exception).
+    # This MUST be visible — a silent crash count is how a broken system
+    # masquerades as a healthy one.
+    crashed = sum(
+        1 for c in recent_cycles
+        if c.get("status") not in ("ok", "degraded", "failed")
+    )
 
     # Signals
     all_signals = storage.list_recent_signals(limit=500)
@@ -87,9 +94,24 @@ def build_digest_text(
 
     dist = ", ".join(f"{a}={n}" for a, n in actions.items()) or "—"
 
-    lines = [
+    cycles_line = f"Ciclos: {len(recent_cycles)} (ok {ok}, deg {degraded}, fail {failed}"
+    if crashed:
+        cycles_line += f", ⚠️ crasheados {crashed}"
+    cycles_line += ")"
+
+    lines = []
+    # Loud alert at the top if anything crashed — the digest's job is to make
+    # a broken system obvious, not to bury it.
+    if crashed:
+        total = len(recent_cycles)
+        pct = int(round(100 * crashed / total)) if total else 0
+        lines.append(
+            f"🚨 <b>ALERTA</b>: {crashed}/{total} ciclos crashearon ({pct}%). "
+            "Revisa Ollama y los logs."
+        )
+    lines += [
         f"📊 <b>Digest</b> (últimas {lookback_hours:g}h)",
-        f"Ciclos: {len(recent_cycles)} (ok {ok}, deg {degraded}, fail {failed})",
+        cycles_line,
         f"Señales: {len(recent_signals)} (entregadas {delivered}). Distribución: {dist}",
         f"Win rate 1h: {wr('1h')}  ·  4h: {wr('4h')}  ·  24h: {wr('24h')}",
     ]

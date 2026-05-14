@@ -55,6 +55,39 @@ def test_build_digest_counts_recent_only(tmp_path: Path):
     assert "Mejor: BTC/USDT BUY +5.00%" in text
 
 
+def test_digest_flags_crashed_cycles(tmp_path: Path):
+    """A cycle started but never finished (status NULL) must show as crashed + alert."""
+    storage = Storage(db_path=tmp_path / "t.db")
+    # 1 healthy cycle
+    ok_cycle = storage.start_cycle()
+    storage.finish_cycle(
+        ok_cycle, status=CycleStatus.OK,
+        pairs_analyzed=5, pairs_passed_prefilter=0,
+        signals_generated=0, notes=None,
+    )
+    # 2 crashed cycles: started but never finished (no status)
+    storage.start_cycle()
+    storage.start_cycle()
+
+    text = build_digest_text(storage=storage, lookback_hours=1)
+    assert "crasheados 2" in text
+    assert "🚨" in text
+    assert "ALERTA" in text
+
+
+def test_digest_no_alert_when_all_ok(tmp_path: Path):
+    storage = Storage(db_path=tmp_path / "t.db")
+    cycle = storage.start_cycle()
+    storage.finish_cycle(
+        cycle, status=CycleStatus.OK,
+        pairs_analyzed=5, pairs_passed_prefilter=0,
+        signals_generated=0, notes=None,
+    )
+    text = build_digest_text(storage=storage, lookback_hours=1)
+    assert "🚨" not in text
+    assert "crasheados" not in text
+
+
 def test_digest_lookback_excludes_old(tmp_path: Path):
     storage = Storage(db_path=tmp_path / "t.db")
     cycle = storage.start_cycle()
