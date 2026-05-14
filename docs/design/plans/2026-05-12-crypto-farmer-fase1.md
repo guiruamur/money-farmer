@@ -1,6 +1,6 @@
 # crypto-farmer Fase 1 — Plan de implementación
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use metodología TDD (recommended) or ejecución por fases to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Para quien ejecute este plan:** impleméntalo tarea por tarea siguiendo TDD, con revisión entre tareas. Los pasos usan checkboxes (`- [ ]`) para el seguimiento.
 
 **Goal:** Construir el servicio Python local `crypto-farmer` que cada 15 min analiza top 10-20 cripto con un LLM local (Ollama) usando indicadores técnicos + noticias + memoria RAG + feedback in-context, y entrega señales por Telegram, según lo especificado en `docs/design/specs/2026-05-12-crypto-farmer-fase1-design.md`.
 
