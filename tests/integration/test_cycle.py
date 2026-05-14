@@ -128,6 +128,24 @@ def test_cycle_degraded_when_news_fails(tmp_path: Path):
     assert "news" in (result.notes or "").lower()
 
 
+def test_cycle_degraded_when_llm_unreachable(tmp_path: Path):
+    """If Ollama is down (LLMCallError), the cycle must degrade, not crash."""
+    from crypto_farmer.llm.client import LLMCallError
+
+    class _BrokenLLM:
+        def analyze(self, ctx):
+            raise LLMCallError("ollama: simulated 404")
+
+    cycle, storage, notifier, _ = _build_cycle(tmp_path)
+    # Replace the parser's client with one that always fails the call.
+    cycle._deps.parser._client = _BrokenLLM()
+    result = cycle.run()
+    assert result.status == CycleStatus.DEGRADED
+    assert "llm_unavailable" in (result.notes or "").lower()
+    # No signals persisted because every LLM call failed.
+    assert storage.list_recent_signals(limit=10) == []
+
+
 def test_cycle_skips_low_confidence_signal_delivery(tmp_path: Path):
     low_conf = RawLLMResponse(text='{"action":"BUY","confidence":40,"reasoning":"r","entry_price_hint":null,"invalidation_level":null,"time_horizon":"short","key_factors":[]}')
     cycle, storage, notifier, _ = _build_cycle(tmp_path, llm_responses=[low_conf])

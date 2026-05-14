@@ -15,7 +15,7 @@ from crypto_farmer.learning.feedback import FeedbackBuilder
 from crypto_farmer.learning.memory import Memory
 from crypto_farmer.learning.outcomes import OutcomeService
 from crypto_farmer.learning.situation import Situation
-from crypto_farmer.llm.client import AnalysisContext
+from crypto_farmer.llm.client import AnalysisContext, LLMCallError
 from crypto_farmer.llm.parser import LLMParseError, SignalParser
 from crypto_farmer.llm.prompts import PromptBuilder
 from crypto_farmer.logging_setup import get_logger
@@ -169,6 +169,13 @@ class Cycle:
             except LLMParseError as e:
                 log.warning("llm_parse_failed", extra={"pair": pair, "error": str(e)})
                 d.metrics.inc("llm_parse_failed")
+                continue
+            except LLMCallError as e:
+                # Ollama unreachable / model missing / timeout. Degrade the cycle
+                # (skip this pair, keep going) instead of letting it crash.
+                notes.append(f"llm_unavailable: {e}")
+                log.warning("llm_call_failed", extra={"pair": pair, "error": str(e)})
+                d.metrics.inc("llm_call_failed")
                 continue
             d.metrics.record_latency("llm", (time.monotonic() - t0) * 1000)
 
