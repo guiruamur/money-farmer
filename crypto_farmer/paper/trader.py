@@ -92,6 +92,18 @@ class PaperTrader:
             for r in rows
         ]
 
+    def position_for(self, pair: str) -> Position | None:
+        """Return the open position for `pair`, or None if there isn't one."""
+        row = self._storage.get_position(pair=pair)
+        if row is None:
+            return None
+        return Position(
+            pair=row["pair"], qty=float(row["qty"]),
+            avg_entry_price=float(row["avg_entry_price"]),
+            opened_at=_parse_iso(row["opened_at"]),
+            id=int(row["id"]),
+        )
+
     def on_signal(
         self, *, pair: str, action: SignalAction, price: float,
         now: datetime | None = None,

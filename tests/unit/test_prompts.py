@@ -35,7 +35,37 @@ def test_prompt_renders_minimal_context():
     assert "RSI: 28.50" in rendered
     assert "(sin noticias relevantes)" in rendered
     assert "(sin situaciones similares en memoria)" in rendered
+    assert "(paper trading no activo)" in rendered
     assert "Tu tarea" in rendered
+
+
+def test_prompt_renders_open_position():
+    builder = PromptBuilder(template_path=PROMPT_PATH)
+    ctx = _ctx()
+    ctx.portfolio_state = {
+        "cash": 639.68,
+        "open_positions": 2,
+        "this_pair": {
+            "has_position": True, "entry_price": 90.61, "qty": 2.2073,
+            "current_price": 91.09, "unrealized_pnl_pct": 0.53,
+        },
+    }
+    rendered = builder.render(ctx, now=datetime(2026, 5, 12, 10, 0, tzinfo=timezone.utc))
+    assert "TIENES UNA POSICIÓN ABIERTA" in rendered
+    assert "90.61" in rendered
+    assert "0.53%" in rendered
+
+
+def test_prompt_renders_no_position():
+    builder = PromptBuilder(template_path=PROMPT_PATH)
+    ctx = _ctx()
+    ctx.portfolio_state = {
+        "cash": 800.0, "open_positions": 1,
+        "this_pair": {"has_position": False},
+    }
+    rendered = builder.render(ctx, now=datetime(2026, 5, 12, 10, 0, tzinfo=timezone.utc))
+    assert "No tienes posición abierta" in rendered
+    assert "Cash disponible: 800.0" in rendered
 
 
 def test_prompt_renders_with_news_and_memory():
@@ -56,3 +86,4 @@ def test_system_message_is_stable():
     sys = builder.system_message()
     assert "analista cuantitativo" in sys
     assert "JSON" in sys
+    assert "SELL" in sys  # must instruct closing open positions

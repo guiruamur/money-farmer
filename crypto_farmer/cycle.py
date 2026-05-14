@@ -156,12 +156,36 @@ class Cycle:
                 notes.append(f"embeddings_unavailable: {e}")
                 log.warning("embeddings_failed", extra={"pair": pair, "error": str(e)})
 
+            price = float(ohlcv_by_pair[pair]["close"].iloc[-1])
+
+            # Portfolio state: let the LLM know what it already holds so it can
+            # reason about SELL on open positions, not just BUY blindly.
+            portfolio_state: dict[str, Any] = {}
+            if d.paper_trader is not None:
+                wallet = d.paper_trader.wallet()
+                pos = d.paper_trader.position_for(pair)
+                this_pair: dict[str, Any] = {"has_position": pos is not None}
+                if pos is not None:
+                    unrealized_pct = (price / pos.avg_entry_price - 1.0) * 100.0
+                    this_pair.update(
+                        entry_price=round(pos.avg_entry_price, 4),
+                        qty=round(pos.qty, 6),
+                        current_price=round(price, 4),
+                        unrealized_pnl_pct=round(unrealized_pct, 2),
+                    )
+                portfolio_state = {
+                    "cash": round(wallet.cash, 2),
+                    "open_positions": len(d.paper_trader.positions()),
+                    "this_pair": this_pair,
+                }
+
             ctx = AnalysisContext(
                 pair=pair, timeframe=d.timeframe,
                 indicators=snap,
                 ohlcv_summary=OHLCVSummary.from_df(df, recent_n=20).model_dump(),
                 news=relevant_news, memory_hits=memory_hits,
                 recent_feedback=feedback,
+                portfolio_state=portfolio_state,
             )
             t0 = time.monotonic()
             try:
@@ -179,7 +203,6 @@ class Cycle:
                 continue
             d.metrics.record_latency("llm", (time.monotonic() - t0) * 1000)
 
-            price = ohlcv_by_pair[pair]["close"].iloc[-1]
             delivered = parsed.signal.confidence >= d.min_confidence and parsed.signal.action != SignalAction.HOLD
             sig_id = d.storage.save_signal(
                 cycle_id=cycle_id, pair=pair, timeframe=d.timeframe,

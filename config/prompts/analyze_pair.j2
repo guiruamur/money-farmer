@@ -35,6 +35,19 @@
 - (sin situaciones similares en memoria)
 {%- endif %}
 
+## Tu cartera (paper trading)
+{% if portfolio_state -%}
+{% if portfolio_state.this_pair.has_position -%}
+- TIENES UNA POSICIÓN ABIERTA de {{ pair }}: {{ portfolio_state.this_pair.qty }} comprados a {{ portfolio_state.this_pair.entry_price }}, precio actual {{ portfolio_state.this_pair.current_price }} (P&L flotante {{ portfolio_state.this_pair.unrealized_pnl_pct }}%).
+  Evalúa ACTIVAMENTE si emitir SELL para realizar la ganancia o cortar la pérdida. No mantengas una posición por inercia.
+{%- else -%}
+- No tienes posición abierta de {{ pair }}. Solo BUY abriría una; SELL no haría nada.
+{%- endif %}
+- Cash disponible: {{ portfolio_state.cash }} | Posiciones abiertas en total: {{ portfolio_state.open_positions }}
+{%- else -%}
+- (paper trading no activo)
+{%- endif %}
+
 ## Tu tarea
 Analiza el par y responde EXCLUSIVAMENTE con un objeto JSON con este schema, sin texto adicional ni explicación previa:
 {
