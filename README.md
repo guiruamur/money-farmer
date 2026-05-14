@@ -31,11 +31,34 @@ Debe terminar sin errores y crear `data/crypto_farmer.db` con un row en `cycles`
 
 ## Ejecución 24/7
 
+**Forma recomendada — script de arranque** (resuelve el arranque de Ollama tras un reinicio del PC):
+
+```powershell
+.\scripts\start.ps1
+```
+
+`start.ps1` espera a que el disco de modelos esté montado, reinicia Ollama apuntando a la ruta correcta, verifica que los modelos están disponibles y lanza el bot como proceso en segundo plano. Para detenerlo:
+
+```powershell
+.\scripts\stop.ps1                 # solo el bot
+.\scripts\stop.ps1 -IncludeOllama  # bot + Ollama
+```
+
+**Arranque manual** (si prefieres controlar el proceso tú):
+
 ```powershell
 python -m crypto_farmer --config config/config.yaml
 ```
 
-El proceso queda corriendo. Cada 15 min ejecuta un ciclo. Los outcomes a 1h/4h/24h se miden automáticamente. Las señales con confianza >= 60 se envían al chat configurado.
+El proceso queda corriendo. Cada ciclo (según `scheduler.interval_minutes`) analiza el universo de pares. Los outcomes a 1h/4h/24h se miden automáticamente. Las señales con confianza >= `min_confidence` se envían al chat de Telegram.
+
+**Arranque automático al iniciar sesión** (opcional) — registra `start.ps1` como tarea programada:
+
+```powershell
+$action  = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -File `"$PWD\scripts\start.ps1`""
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+Register-ScheduledTask -TaskName "crypto-farmer-start" -Action $action -Trigger $trigger
+```
 
 ## Comandos del bot
 
