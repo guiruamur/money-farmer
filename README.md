@@ -72,6 +72,6 @@ $trigger = New-ScheduledTaskTrigger -Daily -At 3am
 Register-ScheduledTask -TaskName "crypto-farmer-backup" -Action $action -Trigger $trigger
 ```
 
-## Aviso
+## Estado
 
-Fase 1 NO ejecuta órdenes reales. Solo genera y entrega señales. No tomes decisiones de inversión basándote únicamente en este sistema; está en validación.
+Proyecto en desarrollo, fase 1. Es un experimento personal de trading algorítmico con IA local: analiza el mercado, genera señales y las simula en una cartera virtual (paper trading). No ejecuta operaciones reales — no es un producto ni una herramienta de inversión, es código en construcción.
