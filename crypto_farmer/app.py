@@ -42,6 +42,7 @@ class App:
     bot_commands: BotCommands
     storage: Storage
     metrics: Metrics
+    notifier: TelegramNotifier
 
 
 def _health_checker(*, ollama_base: str, db_path: str, chroma_path: str):
@@ -177,4 +178,5 @@ def build_app(*, config_path: str | Path) -> App:
     return App(
         config=cfg, cycle=cycle, scheduler=scheduler,
         bot_commands=bot_commands, storage=storage, metrics=metrics,
+        notifier=notifier,
     )

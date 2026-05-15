@@ -79,6 +79,8 @@ def main() -> None:
         return
 
     app.scheduler.start()
+    app.notifier.send_text("🟢 <b>Sistema iniciado</b> — crypto-farmer en marcha.")
+    log.info("system_started_notified")
 
     tg_app = _build_telegram_app(app, token=app.config.delivery.telegram.bot_token)
 
@@ -102,6 +104,9 @@ def main() -> None:
         asyncio.run(_run())
     finally:
         app.scheduler.stop()
+        # Best-effort: solo se envía si el proceso se cierra de forma ordenada
+        # (p.ej. Ctrl+C). En un kill forzado lo manda stop.ps1 en su lugar.
+        app.notifier.send_text("🔴 <b>Sistema finalizado</b> — crypto-farmer detenido.")
 
 
 if __name__ == "__main__":

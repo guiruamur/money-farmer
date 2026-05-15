@@ -49,6 +49,18 @@ def test_telegram_notifier_posts_to_bot_api():
 
 
 @respx.mock
+def test_telegram_notifier_send_text():
+    route = respx.post(_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
+    n = TelegramNotifier(bot=_TOKEN, chat_id="123")
+    n.send_text("🟢 <b>Sistema iniciado</b>")
+    assert route.called
+    payload = dict(httpx.QueryParams(route.calls.last.request.content.decode()))
+    assert payload["chat_id"] == "123"
+    assert "Sistema iniciado" in payload["text"]
+    assert payload["parse_mode"] == "HTML"
+
+
+@respx.mock
 def test_telegram_notifier_deliver_cycle_status_skips_ok():
     route = respx.post(_URL).mock(return_value=httpx.Response(200, json={"ok": True}))
     n = TelegramNotifier(bot=_TOKEN, chat_id="123")

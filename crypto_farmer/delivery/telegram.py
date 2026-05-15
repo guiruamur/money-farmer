@@ -110,6 +110,10 @@ class TelegramNotifier:
             # never crash a trading cycle.
             pass
 
+    def send_text(self, text: str) -> None:
+        """Send a free-form HTML message (system events, etc.). Best-effort."""
+        self._send(text)
+
     def deliver(self, signals: list[DeliverableSignal]) -> None:
         for ds in signals:
             self._send(format_signal_message(ds))
