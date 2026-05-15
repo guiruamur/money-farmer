@@ -22,3 +22,4 @@ def test_app_builds_from_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert app.cycle is not None
     assert app.scheduler is not None
     assert app.bot_commands is not None
+    assert app.notifier is not None
