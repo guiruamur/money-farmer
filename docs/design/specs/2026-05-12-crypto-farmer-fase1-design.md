@@ -552,6 +552,45 @@ Resumen de planes posteriores. Cada fase es funcional por sí misma y valida la 
 - DeFi yield aggregation.
 - Detección de pump & dumps.
 
+### Rama paralela — Web3 / on-chain (aprendizaje)
+
+Camino independiente del CEX-centric (Fases 2-3) para entender web3 con el
+mismo esqueleto del proyecto. Tres pasos progresivos, de menos a más
+contacto con la cadena:
+
+#### W1 — Lectura on-chain (próximo foco de aprendizaje)
+
+- Nuevo `MarketDataSource` que en lugar de OHLCV de Binance lee:
+  - Precio de un pool de Uniswap v3 (sqrtPriceX96 → precio).
+  - Eventos `Swap` recientes (volumen on-chain de los últimos N bloques).
+  - Liquidaciones recientes en Aave v3 (eventos `LiquidationCall`).
+- Proveedor RPC: Alchemy free tier (o Infura). Chain inicial: Base o
+  Arbitrum (gas barato, datos relevantes, sin el coste de un nodo full).
+- La IA emite señales como en Fase 1, pero el "contexto de mercado" pasa
+  a ser on-chain. Sin firmar nada, sin wallet.
+- Aprendizaje: JSON-RPC, ABIs, eventos de contratos, indexers (The Graph
+  como alternativa a leer eventos a pelo), diferencia AMM vs orderbook.
+- Reutiliza ~80% del proyecto: scheduler, cycle, LLM, RAG, storage,
+  notifier, paper trader (si quieres tradear con datos on-chain en
+  paper, también vale).
+
+#### W2 — Ejecución en testnet (futuro)
+
+- Nuevo `DexExecutor` que firma swaps reales en Sepolia/Base-Sepolia
+  con `web3.py` + wallet propio (clave en .env, tokens y ETH gratis de
+  faucet).
+- Aprendizaje: firmar transacciones, gas, slippage, `approve` ERC-20,
+  callback de receipts, MEV básico.
+- Sin riesgo económico real.
+
+#### W3 — Mainnet L2 con cantidades mínimas (futuro)
+
+- Mismo `DexExecutor` apuntando a Base/Arbitrum mainnet con $20-50.
+- Aprendizaje: igual que W2 pero con consecuencias reales y gas
+  realista en L2.
+- Sólo después de validar W2 y de tener señales on-chain con win-rate
+  decente en paper.
+
 ### Ideas exploratorias
 
 - App móvil compañera (lectura).
