@@ -66,27 +66,30 @@ def build_digest_text(
         if s.get("delivered"):
             delivered += 1
 
-    # Outcomes by horizon
+    # Outcomes by horizon — filtered by WHEN THE OUTCOME WAS MEASURED, not
+    # by when the signal was generated. With a short digest window (e.g.
+    # 30 min) it's almost guaranteed that no signal inside the window has a
+    # 1h/4h/24h outcome yet, so iterating recent_signals always yields "—".
+    # What we actually want to know is "what did we just learn in the last
+    # 30 min?" — i.e. outcomes whose measurement landed inside the window.
     wins_by_h: dict[str, int] = {"1h": 0, "4h": 0, "24h": 0}
     rated_by_h: dict[str, int] = {"1h": 0, "4h": 0, "24h": 0}
     best: tuple[str, str, float] | None = None  # (pair, action, return)
     worst: tuple[str, str, float] | None = None
-    for s in recent_signals:
-        outcomes = storage.list_outcomes_for_signal(s["id"])
-        for o in outcomes:
-            h = o["horizon"]
-            if h not in rated_by_h:
-                continue
-            rated_by_h[h] += 1
-            if o.get("verdict") == "correct":
-                wins_by_h[h] += 1
-            ret = o.get("return_pct")
-            if ret is not None:
-                t = (s["pair"], s["action"], float(ret))
-                if best is None or t[2] > best[2]:
-                    best = t
-                if worst is None or t[2] < worst[2]:
-                    worst = t
+    for o in storage.list_recent_outcomes(since=since):
+        h = o["horizon"]
+        if h not in rated_by_h:
+            continue
+        rated_by_h[h] += 1
+        if o.get("verdict") == "correct":
+            wins_by_h[h] += 1
+        ret = o.get("return_pct")
+        if ret is not None:
+            t = (o["pair"], o["action"], float(ret))
+            if best is None or t[2] > best[2]:
+                best = t
+            if worst is None or t[2] < worst[2]:
+                worst = t
 
     def wr(h: str) -> str:
         rated = rated_by_h[h]

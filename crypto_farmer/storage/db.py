@@ -199,6 +199,20 @@ class Storage:
                 (signal_id, horizon, _iso(measured_at), price_then, return_pct, verdict),
             )
 
+    def list_recent_outcomes(self, *, since: datetime) -> list[dict[str, Any]]:
+        """Outcomes whose measurement landed at or after `since`, joined with
+        the originating signal so callers can compute per-action stats without
+        a second round trip."""
+        with self._conn() as c:
+            cur = c.execute(
+                "SELECT o.horizon, o.verdict, o.return_pct, o.measured_at, "
+                "s.pair, s.action "
+                "FROM signal_outcomes o JOIN signals s ON s.id = o.signal_id "
+                "WHERE o.measured_at >= ? ORDER BY o.measured_at",
+                (_iso(since),),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
     def list_outcomes_for_signal(self, signal_id: int) -> list[dict[str, Any]]:
         with self._conn() as c:
             cur = c.execute(
