@@ -23,9 +23,15 @@ $RequiredModels = @("qwen2.5:7b-instruct-q4_K_M", "mxbai-embed-large")
 
 function Step($n, $msg) { Write-Host "[$n/4] $msg" -ForegroundColor Cyan }
 function Ok($msg)       { Write-Host "      $msg" -ForegroundColor Green }
-function Fail($msg)     { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
+function Fail($msg)     { Write-Host "ERROR: $msg" -ForegroundColor Red; try { Stop-Transcript | Out-Null } catch {}; exit 1 }
 
-Write-Host "=== Arranque crypto-farmer ===" -ForegroundColor Cyan
+# Log persistente de cada arranque: imprime en pantalla Y graba a archivo, para
+# que un fallo al encender el PC (timing de R: / Ollama) deje rastro. Antes la
+# salida solo vivia en la ventana efimera y no habia forma de saber que fallo.
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+try { Start-Transcript -Path (Join-Path $LogDir "start.log") -Append | Out-Null } catch {}
+
+Write-Host "=== Arranque crypto-farmer ($(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) ===" -ForegroundColor Cyan
 
 # --- 1. Esperar a que el disco de modelos esté montado ---
 Step 1 "Esperando disco de modelos ($ModelsPath)..."
@@ -58,13 +64,22 @@ if (-not $ollamaUp) { Fail "Ollama no respondió en 60s." }
 Ok "Ollama responde en :11434"
 
 # --- 3. Verificar que Ollama ve los modelos necesarios ---
+# Tras reiniciar Ollama en un arranque en frio (R: recien montado), 'ollama list'
+# puede tardar unos segundos en mostrar los modelos. Reintentamos hasta 60s en
+# vez de abortar a la primera: ese Fail prematuro era la causa del fallo al
+# encender el PC.
 Step 3 "Verificando modelos..."
-$installed = (& ollama list 2>&1 | Out-String)
-foreach ($m in $RequiredModels) {
-    if ($installed -notmatch [regex]::Escape($m)) {
-        Write-Host $installed
-        Fail "Ollama no ve el modelo '$m'. ¿Disco R: correcto?"
-    }
+$deadline = (Get-Date).AddSeconds(60)
+$missing = $RequiredModels
+do {
+    $installed = (& ollama list 2>&1 | Out-String)
+    $missing = @($RequiredModels | Where-Object { $installed -notmatch [regex]::Escape($_) })
+    if ($missing.Count -eq 0) { break }
+    Start-Sleep -Seconds 3
+} while ((Get-Date) -lt $deadline)
+if ($missing.Count -gt 0) {
+    Write-Host $installed
+    Fail "Ollama no ve los modelos: $($missing -join ', '). ¿Disco R: correcto?"
 }
 Ok "modelos disponibles: $($RequiredModels -join ', ')"
 
@@ -88,3 +103,4 @@ Write-Host ""
 Write-Host "=== Sistema arrancado correctamente ===" -ForegroundColor Cyan
 Write-Host "Bot y Ollama corriendo en segundo plano."
 Write-Host "Revisa el progreso por Telegram o en data\logs\crypto_farmer.log"
+try { Stop-Transcript | Out-Null } catch {}
