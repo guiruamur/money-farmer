@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -84,3 +84,53 @@ class BacktestRunner:
             self._clock.current = t
             self._outcomes.run_due_jobs(now=t)
         log.info("backtest_finished", extra={"since": since.isoformat(), "until": until.isoformat()})
+
+
+def build_from_config(*, config, run_dir: Path, pairs: list[str],
+                      since: datetime, until: datetime) -> "BacktestRunner":
+    import ccxt
+    from crypto_farmer.backtest.llm_cache import CachedLLMClient
+    from crypto_farmer.backtest.null_notifier import NullNotifier
+    from crypto_farmer.llm.client import OllamaClient
+    from crypto_farmer.llm.prompts import PromptBuilder
+    from crypto_farmer.learning.embeddings import OllamaEmbeddings
+    from crypto_farmer.paper.trader import PaperTrader, PaperTraderConfig
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+    clock = BacktestClock()
+    storage = Storage(db_path=str(run_dir / "crypto_farmer.db"), clock=clock)
+
+    tf = config.market.timeframe
+    lookback = config.market.ohlcv_lookback
+    margin = timedelta(minutes=_TF_MINUTES[tf] * lookback)
+    store = OhlcvStore(exchange=ccxt.binance({"enableRateLimit": True}))
+    frames = {
+        p: store.load(pair=p, timeframe=tf, since=since - margin, until=until + timedelta(hours=24))
+        for p in pairs
+    }
+    market = HistoricalMarketSource(clock=clock, frames=frames)
+
+    prompt_builder = PromptBuilder(template_path="config/prompts/analyze_pair.j2")
+    inner = OllamaClient(
+        base_url=config.llm.base_url, model=config.llm.model,
+        prompt_builder=prompt_builder, timeout_seconds=config.llm.timeout_seconds,
+        clock=clock,
+    )
+    cached = CachedLLMClient(inner=inner, db_path="data/backtest/llm_cache.sqlite")
+    embeddings = OllamaEmbeddings(base_url=config.llm.base_url, model=config.llm.embedding_model)
+
+    runner = BacktestRunner.for_test(
+        clock=clock, storage=storage, market=market,
+        llm_client=cached, embeddings=embeddings, notifier=NullNotifier(),
+        metrics=Metrics(), pairs=pairs, chroma_dir=run_dir / "chroma", timeframe=tf,
+    )
+
+    if config.paper.enabled:
+        paper = PaperTrader(storage=storage, config=PaperTraderConfig(
+            initial_cash=config.paper.initial_cash,
+            position_size_pct=config.paper.position_size_pct,
+            vault_pct=config.paper.vault_pct, fee_rate=config.paper.fee_rate,
+        ))
+        runner._cycle._deps.paper_trader = paper  # explicit backtest wiring
+
+    return runner
