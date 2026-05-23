@@ -4,8 +4,8 @@ from datetime import datetime
 
 import pandas as pd
 
-from crypto_farmer.clock import Clock  # noqa: F401
-from crypto_farmer.signals.models import Ticker  # noqa: F401
+from crypto_farmer.clock import Clock
+from crypto_farmer.signals.models import Ticker
 
 _TF_MS = {
     "1m": 60_000,
@@ -45,3 +45,28 @@ class OhlcvStore:
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
         df = df[df["timestamp"] <= pd.Timestamp(until)].reset_index(drop=True)
         return df
+
+
+class HistoricalMarketSource:
+    """MarketDataSource backed by pre-loaded frames, served up to clock.now()."""
+
+    def __init__(self, *, clock: Clock, frames: dict[str, pd.DataFrame]) -> None:
+        self._clock = clock
+        self._frames = frames
+
+    def _visible(self, pair: str) -> pd.DataFrame:
+        df = self._frames[pair]
+        return df[df["timestamp"] <= pd.Timestamp(self._clock.now())]
+
+    def fetch_ohlcv(self, pair: str, timeframe: str, lookback: int) -> pd.DataFrame:
+        return self._visible(pair).tail(lookback).reset_index(drop=True)
+
+    def fetch_ticker(self, pair: str) -> Ticker:
+        visible = self._visible(pair)
+        if visible.empty:
+            raise ValueError(f"no candle for {pair} at {self._clock.now()}")
+        last = visible.iloc[-1]
+        return Ticker(
+            pair=pair, price=float(last["close"]),
+            timestamp=last["timestamp"].to_pydatetime(),
+        )
