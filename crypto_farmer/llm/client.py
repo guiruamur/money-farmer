@@ -7,6 +7,7 @@ from typing import Any, Protocol
 
 import httpx
 
+from crypto_farmer.clock import Clock, SystemClock
 from crypto_farmer.signals.models import IndicatorSnapshot
 
 
@@ -42,15 +43,17 @@ class OllamaClient:
         prompt_builder: Any,
         timeout_seconds: int,
         http_client: httpx.Client | None = None,
+        clock: Clock | None = None,
     ) -> None:
         self._base = base_url.rstrip("/")
         self._model = model
         self._prompt_builder = prompt_builder
         self._timeout = timeout_seconds
         self._client = http_client or httpx.Client(timeout=timeout_seconds)
+        self._clock = clock or SystemClock()
 
     def analyze(self, context: AnalysisContext) -> RawLLMResponse:
-        prompt = self._prompt_builder.render(context, now=datetime.now(timezone.utc))
+        prompt = self._prompt_builder.render(context, now=self._clock.now())
         payload = {
             "model": self._model,
             "stream": False,
