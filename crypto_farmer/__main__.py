@@ -66,7 +66,13 @@ def _run_backtest(argv) -> None:
 
     report_path = run_dir / "report.md"
     report_path.write_text(report, encoding="utf-8")
-    print(report)
+    # Print robustly: Windows consoles default to cp1252 and choke on chars
+    # like the arrow in the report header. The .md file keeps full UTF-8.
+    try:
+        print(report)
+    except UnicodeEncodeError:
+        enc = sys.stdout.encoding or "ascii"
+        print(report.encode(enc, errors="replace").decode(enc))
 
     if ns.export_rag:
         print(
