@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -24,6 +24,7 @@ from crypto_farmer.paper.trader import PaperTrader
 from crypto_farmer.signals.models import (
     CycleStatus, OHLCVSummary, SignalAction,
 )
+from crypto_farmer.clock import Clock, SystemClock
 from crypto_farmer.storage.db import Storage
 
 
@@ -53,6 +54,7 @@ class CycleDeps:
     memory_k: int
     feedback_lookback: int
     paper_trader: PaperTrader | None = None
+    clock: Clock = field(default_factory=SystemClock)
 
 
 @dataclass
@@ -94,7 +96,7 @@ class Cycle:
 
         news_items: list = []
         try:
-            since = datetime.now(timezone.utc) - timedelta(hours=d.news_max_age_hours)
+            since = d.clock.now() - timedelta(hours=d.news_max_age_hours)
             news_items = d.news.fetch_recent(since=since)
         except NewsFetchError as e:
             notes.append(f"news_unavailable: {e}")
@@ -214,7 +216,7 @@ class Cycle:
                 indicators=snap.model_dump(mode="json"),
                 news=relevant_news, memory_hits=memory_hits,
                 feedback_summary=feedback.get("summary", ""),
-                prompt_rendered=d.prompt_builder.render(ctx, now=datetime.now(timezone.utc)),
+                prompt_rendered=d.prompt_builder.render(ctx, now=d.clock.now()),
                 raw_llm_response=parsed.raw_text,
             )
             d.metrics.inc("signals_generated")
@@ -227,14 +229,14 @@ class Cycle:
                         "pair": pair,
                         "action": parsed.signal.action.value,
                         "signal_id": str(sig_id),
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": d.clock.now().isoformat(),
                     },
                 )
                 d.storage.update_signal_memory_entry_id(signal_id=sig_id, memory_entry_id=entry_id)
                 log.debug("memory_added", extra={"entry_id": entry_id, "signal_id": sig_id})
 
             d.outcomes.schedule_measurements(
-                signal_id=sig_id, generated_at=datetime.now(timezone.utc),
+                signal_id=sig_id, generated_at=d.clock.now(),
             )
             if delivered:
                 d.notifier.deliver([DeliverableSignal(
@@ -248,6 +250,7 @@ class Cycle:
             if d.paper_trader is not None and parsed.signal.confidence >= d.min_confidence:
                 outcome = d.paper_trader.on_signal(
                     pair=pair, action=parsed.signal.action, price=float(price),
+                    now=d.clock.now(),
                 )
                 # Solo notificamos las acciones interesantes (open/close/no-pos/bancarrota)
                 d.notifier.deliver_paper_outcome(outcome)

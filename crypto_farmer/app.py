@@ -11,6 +11,7 @@ from telegram import Bot
 from crypto_farmer.analysis.indicators import IndicatorEngine
 from crypto_farmer.analysis.prefilter import Prefilter, PrefilterConfig
 from crypto_farmer.config import Config, load_config
+from crypto_farmer.clock import SystemClock
 from crypto_farmer.cycle import Cycle, CycleDeps
 from crypto_farmer.data.market import CcxtBinanceSource
 from crypto_farmer.data.news import CryptoPanicSource, NoopNewsSource
@@ -77,7 +78,8 @@ def build_app(*, config_path: str | Path) -> App:
     )
 
     metrics = Metrics()
-    storage = Storage(db_path=cfg.storage.sqlite_path)
+    clock = SystemClock()
+    storage = Storage(db_path=cfg.storage.sqlite_path, clock=clock)
 
     market = CcxtBinanceSource(exchange=ccxt.binance({"enableRateLimit": True}))
     news = (
@@ -99,6 +101,7 @@ def build_app(*, config_path: str | Path) -> App:
     llm = OllamaClient(
         base_url=cfg.llm.base_url, model=cfg.llm.model,
         prompt_builder=prompt_builder, timeout_seconds=cfg.llm.timeout_seconds,
+        clock=clock,
     )
     parser = SignalParser(llm_client=llm, max_retries=cfg.llm.max_retries)
 
@@ -141,6 +144,7 @@ def build_app(*, config_path: str | Path) -> App:
         memory_k=cfg.learning.memory_k,
         feedback_lookback=cfg.learning.feedback_lookback,
         paper_trader=paper_trader,
+        clock=clock,
     )
     cycle = Cycle(deps)
 
