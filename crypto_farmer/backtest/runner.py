@@ -42,7 +42,11 @@ class BacktestRunner:
 
     @classmethod
     def for_test(cls, *, clock, storage, market, llm_client, embeddings, notifier,
-                 metrics, pairs, chroma_dir, timeframe="15m") -> "BacktestRunner":
+                 metrics, pairs, chroma_dir, timeframe="15m",
+                 prefilter_config: PrefilterConfig | None = None,
+                 min_confidence: int = 60, ohlcv_lookback: int = 200,
+                 news_max_age_hours: int = 24, memory_k: int = 3,
+                 feedback_lookback: int = 20) -> "BacktestRunner":
         from crypto_farmer.llm.parser import SignalParser
         from crypto_farmer.llm.prompts import PromptBuilder
 
@@ -54,7 +58,7 @@ class BacktestRunner:
             storage=storage, market=market,
             horizons_hours=[1, 4, 24], memory=memory,
         )
-        prefilter = Prefilter(PrefilterConfig(
+        prefilter = Prefilter(prefilter_config or PrefilterConfig(
             rsi_oversold=30, rsi_overbought=70, volume_anomaly_factor=1.8,
             atr_expansion_factor=1.5, cooldown_minutes=0,
         ))
@@ -65,9 +69,9 @@ class BacktestRunner:
             embeddings=embeddings, memory=memory,
             feedback=feedback, outcomes=outcomes,
             notifier=notifier, storage=storage, metrics=metrics,
-            pairs=pairs, timeframe=timeframe, ohlcv_lookback=200,
-            min_confidence=60, news_max_age_hours=24,
-            memory_k=3, feedback_lookback=20,
+            pairs=pairs, timeframe=timeframe, ohlcv_lookback=ohlcv_lookback,
+            min_confidence=min_confidence, news_max_age_hours=news_max_age_hours,
+            memory_k=memory_k, feedback_lookback=feedback_lookback,
             paper_trader=None, clock=clock,
         )
         runner = cls(clock=clock, cycle=Cycle(deps), outcomes=outcomes, timeframe=timeframe)
@@ -119,10 +123,25 @@ def build_from_config(*, config, run_dir: Path, pairs: list[str],
     cached = CachedLLMClient(inner=inner, db_path="data/backtest/llm_cache.sqlite")
     embeddings = OllamaEmbeddings(base_url=config.llm.base_url, model=config.llm.embedding_model)
 
+    # Build the prefilter and decision params FROM THE CONFIG so the backtest
+    # faithfully reflects the live strategy (and can be tuned via --config).
+    prefilter_config = PrefilterConfig(
+        rsi_oversold=config.prefilter.rsi_oversold,
+        rsi_overbought=config.prefilter.rsi_overbought,
+        volume_anomaly_factor=config.prefilter.volume_anomaly_factor,
+        atr_expansion_factor=config.prefilter.atr_expansion_factor,
+        cooldown_minutes=config.prefilter.cooldown_minutes,
+    )
     runner = BacktestRunner.for_test(
         clock=clock, storage=storage, market=market,
         llm_client=cached, embeddings=embeddings, notifier=NullNotifier(),
         metrics=Metrics(), pairs=pairs, chroma_dir=run_dir / "chroma", timeframe=tf,
+        prefilter_config=prefilter_config,
+        min_confidence=config.delivery.telegram.min_confidence,
+        ohlcv_lookback=config.market.ohlcv_lookback,
+        news_max_age_hours=config.news.max_age_hours,
+        memory_k=config.learning.memory_k,
+        feedback_lookback=config.learning.feedback_lookback,
     )
 
     if config.paper.enabled:
