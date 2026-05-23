@@ -133,4 +133,5 @@ def build_from_config(*, config, run_dir: Path, pairs: list[str],
         ))
         runner._cycle._deps.paper_trader = paper  # explicit backtest wiring
 
+    runner._frames = frames
     return runner

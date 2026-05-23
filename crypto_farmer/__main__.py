@@ -62,7 +62,7 @@ def _run_backtest(argv) -> None:
     runner.run(since=since, until=until)
 
     from crypto_farmer.backtest.report import build_report
-    report = build_report(storage=runner._storage, since=since, until=until)
+    report = build_report(storage=runner._storage, since=since, until=until, frames=getattr(runner, "_frames", None))
 
     report_path = run_dir / "report.md"
     report_path.write_text(report, encoding="utf-8")

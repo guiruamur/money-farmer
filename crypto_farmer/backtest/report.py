@@ -2,10 +2,35 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pandas as pd
+
 from crypto_farmer.storage.db import Storage
 
 
-def build_report(*, storage: Storage, since: datetime, until: datetime) -> str:
+def hodl_return_pct(frames: dict[str, "pd.DataFrame"]) -> float:
+    """Equal-weight buy-at-first-candle, hold-to-last-candle return, in %."""
+    rets = []
+    for df in frames.values():
+        if len(df) >= 2:
+            first = float(df["close"].iloc[0])
+            last = float(df["close"].iloc[-1])
+            if first > 0:
+                rets.append((last / first - 1.0) * 100.0)
+    return sum(rets) / len(rets) if rets else 0.0
+
+
+def max_drawdown_pct(equity: list[float]) -> float:
+    """Worst peak-to-trough drop of an equity series, in % (<= 0)."""
+    peak = float("-inf")
+    worst = 0.0
+    for v in equity:
+        peak = max(peak, v)
+        if peak > 0:
+            worst = min(worst, (v - peak) / peak * 100.0)
+    return round(worst, 2)
+
+
+def build_report(*, storage: Storage, since: datetime, until: datetime, frames: dict | None = None) -> str:
     signals = storage.list_recent_signals(limit=100000)
     actions: dict[str, int] = {}
     for s in signals:
@@ -30,6 +55,9 @@ def build_report(*, storage: Storage, since: datetime, until: datetime) -> str:
         f"Señales: {len(signals)}. Distribución: {dist}",
         f"Win rate 1h: {wr('1h')}  ·  4h: {wr('4h')}  ·  24h: {wr('24h')}",
     ]
+
+    if frames is not None:
+        lines.append(f"HODL (equiponderado): {hodl_return_pct(frames):+.2f}%")
 
     wallet = storage.get_wallet()
     if wallet is not None:
