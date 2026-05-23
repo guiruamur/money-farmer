@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+from crypto_farmer.clock import Clock, SystemClock
 from crypto_farmer.signals.models import CycleStatus, NewsItem, Signal
 
 
@@ -124,9 +125,10 @@ def _iso(dt: datetime) -> str:
 
 
 class Storage:
-    def __init__(self, *, db_path: str | Path) -> None:
+    def __init__(self, *, db_path: str | Path, clock: Clock | None = None) -> None:
         self._path = Path(db_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._clock = clock or SystemClock()
         self._init_schema()
 
     @contextmanager
@@ -153,7 +155,7 @@ class Storage:
         with self._conn() as c:
             cur = c.execute(
                 "INSERT INTO cycles (started_at) VALUES (?)",
-                (_iso(datetime.now(timezone.utc)),),
+                (_iso(self._clock.now()),),
             )
             return int(cur.lastrowid)
 
@@ -166,7 +168,7 @@ class Storage:
             c.execute(
                 "UPDATE cycles SET finished_at=?, status=?, pairs_analyzed=?, "
                 "pairs_passed_prefilter=?, signals_generated=?, notes=? WHERE id=?",
-                (_iso(datetime.now(timezone.utc)), status.value,
+                (_iso(self._clock.now()), status.value,
                  pairs_analyzed, pairs_passed_prefilter, signals_generated, notes, cycle_id),
             )
 
@@ -180,7 +182,7 @@ class Storage:
                 "confidence, reasoning, entry_price_hint, invalidation_level, time_horizon, "
                 "key_factors_json, delivered, price_at_signal) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (cycle_id, pair, timeframe, _iso(datetime.now(timezone.utc)),
+                (cycle_id, pair, timeframe, _iso(self._clock.now()),
                  signal.action.value, signal.confidence, signal.reasoning,
                  signal.entry_price_hint, signal.invalidation_level,
                  signal.time_horizon.value, json.dumps(signal.key_factors),
