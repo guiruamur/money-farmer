@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import signal
 import sys
 from datetime import datetime, timezone
@@ -84,6 +85,76 @@ def _run_backtest(argv) -> None:
         )
 
 
+def _run_onchain(argv) -> None:
+    import argparse as _ap
+    import yaml
+
+    p = _ap.ArgumentParser(prog="crypto-farmer onchain")
+    p.add_argument("--once", action="store_true",
+                   help="Run a single cycle and exit.")
+    p.add_argument("--config", default="config/config.yaml")
+    ns = p.parse_args(argv)
+
+    from crypto_farmer.config import load_config
+    cfg = load_config(ns.config)
+
+    with open(ns.config, encoding="utf-8") as fh:
+        raw = yaml.safe_load(fh)
+
+    rpc_url = os.environ.get("ONCHAIN_RPC_URL") or os.environ.get("ALCHEMY_URL")
+    if not rpc_url:
+        print("ERROR: set ONCHAIN_RPC_URL or ALCHEMY_URL env var", file=sys.stderr)
+        sys.exit(2)
+
+    from crypto_farmer.onchain.config import OnchainConfig
+    onchain_cfg = OnchainConfig.from_dict(raw["onchain"], rpc_url=rpc_url)
+
+    from crypto_farmer.onchain.rpc import RpcClient
+    from crypto_farmer.onchain.pool_source import UniswapPoolSource
+    rpc = RpcClient(url=onchain_cfg.rpc_url)
+    source = UniswapPoolSource(
+        rpc=rpc,
+        pool_address=onchain_cfg.pool_address,
+        decimals0=onchain_cfg.token0_decimals,
+        decimals1=onchain_cfg.token1_decimals,
+        pair_label=onchain_cfg.pair_label,
+        block_time_seconds=onchain_cfg.block_time_seconds,
+    )
+
+    from crypto_farmer.llm.client import OllamaClient
+    from crypto_farmer.llm.prompts import PromptBuilder
+    from crypto_farmer.learning.embeddings import OllamaEmbeddings
+
+    prompt_builder = PromptBuilder(template_path="config/prompts/analyze_pair.j2")
+    llm = OllamaClient(
+        base_url=cfg.llm.base_url,
+        model=cfg.llm.model,
+        prompt_builder=prompt_builder,
+        timeout_seconds=cfg.llm.timeout_seconds,
+    )
+    embeddings = OllamaEmbeddings(
+        base_url=cfg.llm.base_url,
+        model=cfg.llm.embedding_model,
+    )
+
+    from crypto_farmer.onchain.runner import build_onchain_cycle
+    cycle = build_onchain_cycle(
+        onchain_cfg=onchain_cfg,
+        data_dir=Path("data/onchain"),
+        market=source,
+        llm_client=llm,
+        embeddings=embeddings,
+    )
+
+    if ns.once:
+        result = cycle.run()
+        print(f"onchain cycle: {result.status.value}")
+    else:
+        print("Scheduled loop not wired yet — running a single cycle.")
+        result = cycle.run()
+        print(f"onchain cycle: {result.status.value}")
+
+
 def _build_telegram_app(app, token: str) -> Application:
     tg = Application.builder().token(token).build()
 
@@ -124,6 +195,10 @@ def _build_telegram_app(app, token: str) -> Application:
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "onchain":
+        _run_onchain(sys.argv[2:])
+        return
+
     if len(sys.argv) > 1 and sys.argv[1] == "backtest":
         _run_backtest(sys.argv[2:])
         return
