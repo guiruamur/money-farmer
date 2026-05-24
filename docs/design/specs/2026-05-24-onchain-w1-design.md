@@ -173,3 +173,26 @@ app en la red Base, y poner la URL RPC en `.env`. El agente no maneja la clave.
 - Solo señales (no ejecución) en W1, como Fase 1.
 - El histórico inicial es modesto (reconstruido de swaps recientes) y crece con
   el tiempo; es aceptable para empezar.
+
+## 12. Próximo paso recomendado (tras W1-a): ampliar el histórico
+
+El histórico corto es la **principal limitación** de W1-a: los indicadores
+técnicos (RSI, MACD, medias, ATR) necesitan ~50+ velas de contexto, y
+reconstruir solo de swaps recientes deja poco. Sin contexto suficiente, el
+prefiltro descarta el par por "datos insuficientes" y las señales salen pobres.
+
+Por eso, **el siguiente paso prioritario tras leer precio será ampliar el
+histórico**. Opciones a evaluar entonces (no ahora):
+
+- **Reconstruir un rango de bloques mucho mayor** de eventos `Swap` (paginando
+  con cuidado los límites de `eth_getLogs` del proveedor). Lo más fiel a "leer
+  la cadena", pero cuesta muchas llamadas RPC.
+- **Persistir y acumular**: guardar las velas que ya se van construyendo en
+  `data/onchain/` y reusarlas entre ejecuciones, de modo que el contexto crezca
+  con el tiempo sin re-descargar.
+- **Indexer/subgraph** como fuente de histórico OHLCV (más rápido, pero
+  depende de terceros y puede requerir API key de pago) — solo si las dos
+  anteriores no bastan.
+
+Decisión diferida: se elegirá al cerrar W1-a, con el coste/latencia reales del
+RPC ya medidos.
