@@ -64,3 +64,14 @@ logging:
 storage:
   sqlite_path: "data/crypto_farmer.db"
   chroma_path: "data/memory"
+
+# Modo on-chain (web3 W1): leer precio de un pool Uniswap v3 por RPC.
+# Lo usa el comando `python -m crypto_farmer onchain`. No afecta al bot CEX.
+# La URL del RPC va en .env (ONCHAIN_RPC_URL), nunca aquí.
+onchain:
+  chain: base
+  pool_address: "0x<pool_uniswap_v3_WETH_USDC_en_base>"  # de info.uniswap.org
+  token0_decimals: 18   # WETH
+  token1_decimals: 6    # USDC
+  pair_label: "ETH/USDC"
+  block_time_seconds: 2
