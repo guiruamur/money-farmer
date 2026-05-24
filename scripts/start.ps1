@@ -21,7 +21,7 @@ if (-not $ModelsPath) { $ModelsPath = "R:\OllamaModels" }
 
 $RequiredModels = @("qwen2.5:7b-instruct-q4_K_M", "mxbai-embed-large")
 
-function Step($n, $msg) { Write-Host "[$n/4] $msg" -ForegroundColor Cyan }
+function Step($n, $msg) { Write-Host "[$n/3] $msg" -ForegroundColor Cyan }
 function Ok($msg)       { Write-Host "      $msg" -ForegroundColor Green }
 function Fail($msg)     { Write-Host "ERROR: $msg" -ForegroundColor Red; try { Stop-Transcript | Out-Null } catch {}; exit 1 }
 
@@ -42,49 +42,58 @@ while (-not (Test-Path $ModelsPath)) {
 }
 Ok "disco disponible"
 
-# --- 2. Reiniciar Ollama apuntando al disco correcto ---
-Step 2 "Reiniciando Ollama..."
+# --- 2. Reiniciar Ollama y verificar que ve los modelos ---
+# La app de bandeja de Ollama arranca sola al encender el PC y puede quedarse
+# con el puerto :11434 apuntando al directorio por defecto (sin los modelos de
+# R:). Por eso reintentamos el CICLO COMPLETO: matar TODO ollama (serve + app
+# de bandeja), relanzar 'serve' con OLLAMA_MODELS=R:, y comprobar que
+# 'ollama list' ve los modelos. Si no, se vuelve a matar y reintentar (la app
+# de bandeja puede haber revivido). Esto era la causa del fallo al encender.
+Step 2 "Reiniciando Ollama y verificando modelos..."
 $env:OLLAMA_MODELS = $ModelsPath
-Get-Process | Where-Object { $_.Name -match "ollama" } |
-    Stop-Process -Force -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 3
-Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Hidden
-
-$deadline = (Get-Date).AddSeconds(60)
-$ollamaUp = $false
-do {
-    Start-Sleep -Seconds 2
-    try {
-        $r = Invoke-WebRequest -Uri "http://127.0.0.1:11434/api/version" `
-             -TimeoutSec 3 -UseBasicParsing
-        $ollamaUp = $r.StatusCode -eq 200
-    } catch { $ollamaUp = $false }
-} while (-not $ollamaUp -and (Get-Date) -lt $deadline)
-if (-not $ollamaUp) { Fail "Ollama no respondió en 60s." }
-Ok "Ollama responde en :11434"
-
-# --- 3. Verificar que Ollama ve los modelos necesarios ---
-# Tras reiniciar Ollama en un arranque en frio (R: recien montado), 'ollama list'
-# puede tardar unos segundos en mostrar los modelos. Reintentamos hasta 60s en
-# vez de abortar a la primera: ese Fail prematuro era la causa del fallo al
-# encender el PC.
-Step 3 "Verificando modelos..."
-$deadline = (Get-Date).AddSeconds(60)
-$missing = $RequiredModels
-do {
-    $installed = (& ollama list 2>&1 | Out-String)
-    $missing = @($RequiredModels | Where-Object { $installed -notmatch [regex]::Escape($_) })
-    if ($missing.Count -eq 0) { break }
+$ready = $false
+$installed = ""
+for ($attempt = 1; $attempt -le 4 -and -not $ready; $attempt++) {
+    Get-Process | Where-Object { $_.Name -match "ollama" } |
+        Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 3
-} while ((Get-Date) -lt $deadline)
-if ($missing.Count -gt 0) {
-    Write-Host $installed
-    Fail "Ollama no ve los modelos: $($missing -join ', '). ¿Disco R: correcto?"
-}
-Ok "modelos disponibles: $($RequiredModels -join ', ')"
+    Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Hidden
 
-# --- 4. Arrancar el bot (matando una instancia previa si la hubiera) ---
-Step 4 "Arrancando bot crypto-farmer..."
+    # Esperar a que el servidor responda (hasta 30s)
+    $deadline = (Get-Date).AddSeconds(30)
+    $up = $false
+    do {
+        Start-Sleep -Seconds 2
+        try {
+            $r = Invoke-WebRequest -Uri "http://127.0.0.1:11434/api/version" `
+                 -TimeoutSec 3 -UseBasicParsing
+            $up = $r.StatusCode -eq 200
+        } catch { $up = $false }
+    } while (-not $up -and (Get-Date) -lt $deadline)
+    if (-not $up) {
+        Write-Host "      intento ${attempt}: Ollama no respondio, reintentando" -ForegroundColor Yellow
+        continue
+    }
+
+    # Comprobar que ve los modelos requeridos (hasta 30s)
+    $deadline = (Get-Date).AddSeconds(30)
+    do {
+        $installed = (& ollama list 2>&1 | Out-String)
+        $missing = @($RequiredModels | Where-Object { $installed -notmatch [regex]::Escape($_) })
+        if ($missing.Count -eq 0) { break }
+        Start-Sleep -Seconds 3
+    } while ((Get-Date) -lt $deadline)
+    if ($missing.Count -eq 0) { $ready = $true }
+    else { Write-Host "      intento ${attempt}: Ollama no ve los modelos, reintentando" -ForegroundColor Yellow }
+}
+if (-not $ready) {
+    Write-Host $installed
+    Fail "Ollama no ve los modelos tras varios intentos: $($RequiredModels -join ', '). Disco R: correcto?"
+}
+Ok "Ollama responde y ve los modelos: $($RequiredModels -join ', ')"
+
+# --- 3. Arrancar el bot (matando una instancia previa si la hubiera) ---
+Step 3 "Arrancando bot crypto-farmer..."
 Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" -ErrorAction SilentlyContinue |
     Where-Object { $_.CommandLine -match "crypto_farmer" } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
