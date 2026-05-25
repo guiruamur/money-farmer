@@ -8,6 +8,25 @@ def _swap_log(block: int, sqrt_price_x96: int, amount0: int) -> dict:
     return {"data": data, "blockNumber": hex(block)}
 
 
+def test_fetch_ohlcv_pages_large_block_range():
+    """A large lookback must page eth_getLogs in chunks (RPC providers cap it)."""
+    class _CountingRpc:
+        def __init__(self): self.calls = 0
+        def block_number(self): return 100_000
+        def call(self, *, to, data): return "0x" + "00" * 96
+        def get_logs(self, *, address, topics, from_block, to_block):
+            self.calls += 1
+            return []
+    rpc = _CountingRpc()
+    src = UniswapPoolSource(
+        rpc=rpc, pool_address="0xpool", decimals0=18, decimals1=6,
+        pair_label="ETH/USDC", block_time_seconds=2,
+        max_block_span=10, max_lookback_blocks=100,
+    )
+    src.fetch_ohlcv("ETH/USDC", "15m", lookback=200)  # capped to 100 blocks / 10 -> ~10 calls
+    assert rpc.calls > 1
+
+
 class _FakeRpc:
     def __init__(self, logs, current_block): self._logs = logs; self._cb = current_block
     def block_number(self): return self._cb

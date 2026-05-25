@@ -24,8 +24,12 @@ class RpcClient:
         try:
             r = self._client.post(self._url, json=payload)
             r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            # Redact: the URL carries the API key in its path — never leak it
+            # into error messages or tracebacks (use `from None`).
+            raise RpcError(f"{method}: HTTP {e.response.status_code}") from None
         except httpx.HTTPError as e:
-            raise RpcError(f"{method}: {e}") from e
+            raise RpcError(f"{method}: {type(e).__name__}") from None
         body = r.json()
         if "error" in body:
             raise RpcError(f"{method}: {body['error']}")

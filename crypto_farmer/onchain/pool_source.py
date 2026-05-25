@@ -18,13 +18,23 @@ class UniswapPoolSource:
 
     def __init__(self, *, rpc: RpcClient, pool_address: str,
                  decimals0: int, decimals1: int, pair_label: str,
-                 block_time_seconds: float) -> None:
+                 block_time_seconds: float, max_block_span: int = 10,
+                 max_lookback_blocks: int = 100) -> None:
         self._rpc = rpc
         self._pool = pool_address
         self._d0 = decimals0
         self._d1 = decimals1
         self._pair = pair_label
         self._block_time = block_time_seconds
+        # RPC providers cap eth_getLogs by block range. Alchemy's FREE tier
+        # caps it at 10 blocks, so that is the default chunk size.
+        self._max_block_span = max_block_span
+        # And (W1-a) cap the total reconstructed range: with a 10-block limit,
+        # rebuilding hours of history would need hundreds of calls. So W1-a
+        # reads only a tiny recent window — fetch_ticker (slot0) is the real
+        # price read; meaningful candle history needs another path (price
+        # accumulation, an indexer, or a paid RPC tier). See W1 spec, section 12.
+        self._max_lookback_blocks = max_lookback_blocks
 
     def _current_price(self) -> float:
         raw = self._rpc.call(to=self._pool, data=_SLOT0_SELECTOR)
@@ -50,18 +60,29 @@ class UniswapPoolSource:
             raw -= 2**256
         return abs(raw) / (10 ** self._d0)
 
+    def _get_logs_paged(self, from_block: int, to_block: int) -> list[dict]:
+        """Fetch Swap logs over [from_block, to_block] in chunks, since RPC
+        providers cap eth_getLogs by result count / range."""
+        logs: list[dict] = []
+        b = from_block
+        while b <= to_block:
+            chunk_to = min(b + self._max_block_span - 1, to_block)
+            logs.extend(self._rpc.get_logs(
+                address=self._pool, topics=[_SWAP_TOPIC0],
+                from_block=b, to_block=chunk_to,
+            ))
+            b = chunk_to + 1
+        return logs
+
     def fetch_ohlcv(self, pair: str, timeframe: str, lookback: int):
         from datetime import timedelta
 
         current = self._rpc.block_number()
         # Estimate the block range covering lookback*15m of history.
         span_seconds = lookback * 15 * 60
-        span_blocks = int(span_seconds / self._block_time)
+        span_blocks = min(int(span_seconds / self._block_time), self._max_lookback_blocks)
         from_block = max(0, current - span_blocks)
-        logs = self._rpc.get_logs(
-            address=self._pool, topics=[_SWAP_TOPIC0],
-            from_block=from_block, to_block=current,
-        )
+        logs = self._get_logs_paged(from_block, current)
         now = datetime.now(timezone.utc)
         rows = []
         for lg in logs:

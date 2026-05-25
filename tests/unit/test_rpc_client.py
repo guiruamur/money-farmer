@@ -30,6 +30,19 @@ def test_get_logs_returns_list():
 
 
 @respx.mock
+def test_rpc_error_redacts_url_with_key():
+    # The Alchemy URL carries the API key in its path; errors must not leak it.
+    respx.post("https://base.example/v2/SECRETKEY").mock(return_value=httpx.Response(400))
+    c = RpcClient(url="https://base.example/v2/SECRETKEY")
+    try:
+        c.block_number()
+        assert False, "expected RpcError"
+    except RpcError as e:
+        assert "SECRETKEY" not in str(e)
+        assert "base.example" not in str(e)
+
+
+@respx.mock
 def test_rpc_error_on_error_field():
     respx.post(_URL).mock(return_value=httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "error": {"message": "boom"}}))
     c = RpcClient(url=_URL)

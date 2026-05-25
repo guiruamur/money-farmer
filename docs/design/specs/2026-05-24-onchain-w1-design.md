@@ -196,3 +196,18 @@ histórico**. Opciones a evaluar entonces (no ahora):
 
 Decisión diferida: se elegirá al cerrar W1-a, con el coste/latencia reales del
 RPC ya medidos.
+
+**Hallazgo del smoke real (2026-05-24):** el **plan gratuito de Alchemy limita
+`eth_getLogs` a un rango de 10 bloques** (en Base, ~20 s). Reconstruir velas de
+swaps por esa vía es por tanto inviable en free tier (cientos de llamadas por
+hora). Verificado que:
+- `fetch_ticker` (precio actual vía `slot0`, un `eth_call`) **funciona sin ese
+  límite** y devuelve el precio correcto de ETH (~2129 USDC en la prueba). Esta
+  es la lectura on-chain esencial de W1-a, y queda validada.
+- `fetch_ohlcv` se capó a una ventana mínima (chunks de 10 bloques, ~100
+  bloques de historia) para no exceder el límite; el ciclo corre `degraded`
+  (pocas velas para los indicadores) pero sin errores.
+Por tanto, **el "siguiente paso" (ampliar histórico) deberá usar acumulación de
+precios en el tiempo, un indexer, o un plan RPC de pago — NO `eth_getLogs`
+masivo en free tier.** Además, los `RpcError` se redactan para no filtrar la
+API key (va en la ruta de la URL de Alchemy).
